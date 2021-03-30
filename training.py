@@ -159,7 +159,7 @@ class Trainer():
         # Return gradient penalty
         return self.gp_weight * ((gradients_norm - 1) ** 2).mean()
 
-    def _train_epoch(self, data_loader, fixed, writer, epoch, timestr):
+    def _train_epoch(self, data_loader, fixed, writer, epoch, loss_path):
         for i, data in enumerate(data_loader):
 
             hr = data[0].clone().detach().requires_grad_(True).to(self.device)
@@ -172,11 +172,6 @@ class Trainer():
             if self.num_steps % self.critic_iterations == 0:
                 self._generator_train_iteration(cr, hr, pcas)
 
-            if i % self.save_every == 0:
-                # Save model progress
-                torch.save(self.D.state_dict(), "trained_models/"+timestr+"_discriminator_model")
-                torch.save(self.G.state_dict(), "trained_models/"+timestr+"_generator_model")
-
             if i % self.print_every == 0:
                 print("Iteration {}".format(i + 1))
                 print("D: {}".format(self.losses['D'][-1]))
@@ -185,7 +180,14 @@ class Trainer():
                 print(f"cuda memory: {torch.cuda.memory_allocated()}")
 
                 if self.num_steps > self.critic_iterations:
+
+                    fixed_writer = {}
+                    fixed_writer["fake"] = self.G(fixed["coarse"]).detach().cpu()
+                    fixed_writer["real"] = fixed["fine"].detach().cpu()
+                    fixed_writer["coarse"] = fixed["coarse"].detach().cpu()
+
                     loss_dict = {
+                        'iters': epoch*len(data_loader)+i,
                         'D': self.losses['D'][-1],
                         'GP': self.losses['GP'][-1],
                         'Gradient Norm': self.losses['gradient_norm'][-1],
@@ -194,21 +196,30 @@ class Trainer():
                         'pca': self.losses['pca'][-1],
                     }
 
-                    loss_dict_writer = {
-                        'D': self.losses['D'],
-                        'GP': self.losses['GP'],
-                        'Gradient Norm': self.losses['gradient_norm'],
-                        'G': self.losses['G'],
-                        'Content': self.losses['Content'],
-                        'pca': self.losses['pca'],
-                    }
+                    if self.num_steps > self.print_every+1:
+                        state = torch.load(loss_path)["losses_running"]
+                        for key, val in loss_dict.items():
+                            state[key].append(val)
+                    else:
+                        state = {
+                            'iters': [],
+                            'D': [],
+                            'GP': [],
+                            'Gradient Norm': [],
+                            'G': [],
+                            'Content': [],
+                            'pca': [],
+                        }
 
-                    fixed_writer = {}
-                    fixed_writer["fake"] = self.G(fixed["coarse"]).detach().cpu()
-                    fixed_writer["real"] = fixed["fine"].detach().cpu()
-                    fixed_writer["coarse"] = fixed["coarse"].detach().cpu()
+                    # Save model progress
+                    torch.save({
+                        "losses_instance": loss_dict,
+                        "discriminator": self.D.state_dict(),
+                        "generator": self.G.state_dict(),
+                        "losses_running": state
+                    }, loss_path)
 
-                    write_to_board(writer, loss_dict, loss_dict_writer, fixed_writer, epoch*len(data_loader)+i)
+                    write_to_board(writer, fixed_writer, loss_path)
 
                     print("G: {}".format(self.losses['G'][-1]))
                     print("Content loss: {}".format(self.losses['Content'][-1]))
@@ -217,10 +228,13 @@ class Trainer():
                 self.losses = {'G': [], 'D': [], 'GP': [], 'gradient_norm': [], 'Content': [], 'pca': []}
 
 
-    def train(self, data_loader, epochs, fixed, save_training_gif=True):
+    def train(self, data_loader, epochs, fixed, save_training_gif=True, loss_path="checkpoints/losses/"):
 
         timestr = time.strftime("%Y%m%d-%H%M%S")
         writer = SummaryWriter()
+
+        loss_path += timestr 
+
 
         # Fix latents to see how image generation improves during training
         fixed_coarse = Variable(fixed["coarse"], requires_grad=True)
@@ -239,5 +253,5 @@ class Trainer():
 
         for epoch in range(epochs):
             print("\nEpoch {}".format(epoch + 1))
-            self._train_epoch(data_loader, fixed_writer, writer, epoch, timestr)
+            self._train_epoch(data_loader, fixed_writer, writer, epoch, loss_path)
 

@@ -69,17 +69,16 @@ def plot_to_tensorboard(writer, fig, step):
     plt.close(fig)
 
 
-def write_to_board(writer, loss_dict, loss_dict_writer, fixed, iters):
-    writer.add_scalars('Losses', loss_dict, iters)
+def write_to_board(writer, fixed, loss_path):
+    state = torch.load(loss_path)
+    losses_running = state["losses_running"]
+    loss_dict = state["losses_instance"]
+
+    writer.add_scalars('Losses', loss_dict, loss_dict["iters"])
 
     fake = fixed["fake"]
     real = fixed["real"]
     coarse = fixed["coarse"]
-
-    pca = loss_dict_writer['pca']
-    G = loss_dict_writer['G']
-    D = loss_dict_writer['D']
-    content = loss_dict_writer['Content']
 
     plt.style.use(['science','no-latex'])
     plt.rcParams.update({"figure.figsize":  (5,10),
@@ -98,17 +97,18 @@ def write_to_board(writer, loss_dict, loss_dict_writer, fixed, iters):
     cax3 = ax[1, 0].imshow(coarse[0, 0, ...], cmap="viridis")
     ax[1, 0].set_title("Coarse")
 
-    ax[1, 1].plot(range(len(pca)), pca, label='pca')
-    ax[1, 1].plot(range(len(G)), G, label='G')
-    ax[1, 1].plot(range(len(D)), D, label='D')
-    ax[1, 1].plot(range(len(content)), content, label='content')
+    ax[1, 1].plot(losses_running["iters"], losses_running["pca"], label='pca')
+    ax[1, 1].plot(losses_running["iters"], losses_running["G"], label='G')
+    ax[1, 1].plot(losses_running["iters"], losses_running["D"], label='D')
+    ax[1, 1].plot(losses_running["iters"], losses_running["Content"], label='content')
     ax[1, 1].set_title("Losses")
     ax[1, 1].set_xlabel("Iteration")
     ax[1, 1].set_title("Loss")
+    ax[1, 1].legend()
 
     plt.colorbar(cax, ax=ax[0, 0], fraction=0.022)
     plt.colorbar(cax2, ax=ax[0, 1], fraction=0.022)
     plt.colorbar(cax3, ax=ax[1, 0], fraction=0.022)
 
     plt.tight_layout()
-    plot_to_tensorboard(writer, fig, iters)
+    plot_to_tensorboard(writer, fig, loss_dict["iters"])
