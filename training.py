@@ -75,6 +75,11 @@ class Trainer():
         projected_real = torch.matmul(real, X.transpose(3, 2)).transpose(0, 1)
         projected_fake = torch.matmul(fake, X.transpose(3, 2)).transpose(0, 1)
 
+        try_weighting = torch.flip(torch.arange(1, projected_real.size(-1)+1, device=self.device), (0, ))
+
+        projected_real = projected_real.size(-1)*projected_real/try_weighting
+        projected_fake = projected_real.size(-1)*projected_fake/try_weighting
+
         coefficient_loss = nn.L1Loss().to(self.device)
         closs = coefficient_loss(projected_fake, projected_real).item()
         return closs
@@ -102,7 +107,7 @@ class Trainer():
 
         gamma = 0.01
         # g_loss = ((1-gamma/2)*eofloss + (1-gamma/2)*content_loss + gamma*g_loss)
-        g_loss = (eofloss + content_loss + gamma*g_loss)
+        g_loss = (eofloss/7 + content_loss + gamma*g_loss)
 
         g_loss.backward()
         self.G_opt.step()
