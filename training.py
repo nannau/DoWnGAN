@@ -65,15 +65,15 @@ class Trainer():
         real = torch.reshape(
             hr, 
             (hr.size(0), hr.size(1), hr.size(2)*hr.size(3))
-        )
+        ).unsqueeze(2).unsqueeze(1)
 
         fake = torch.reshape(
             fake, 
             (fake.size(0), fake.size(1), fake.size(2)*fake.size(3))
-        )
+        ).unsqueeze(2).unsqueeze(1)
 
-        projected_real = torch.matmul(real, X.transpose(3, 2)).transpose(0, 1)
-        projected_fake = torch.matmul(fake, X.transpose(3, 2)).transpose(0, 1)
+        projected_real = torch.matmul(real, X.unsqueeze(-1))
+        projected_fake = torch.matmul(fake, X.unsqueeze(-1))
 
         coefficient_loss = nn.L1Loss().to(self.device)
         closs = coefficient_loss(projected_fake, projected_real).item()
@@ -88,7 +88,7 @@ class Trainer():
         batch_size = cr.size()[0]
         generated_data = self.G(cr)
 
-        X = pcas[:1, ...]
+        X = pcas[0, ...]
         eofloss = self._eof_loss(X, hr, generated_data)
         self.losses['pca'].append(eofloss)
 

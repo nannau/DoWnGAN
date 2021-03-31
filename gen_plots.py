@@ -99,7 +99,7 @@ def write_to_board(writer, fixed, loss_path):
 
     ax[1, 1].plot(losses_running["iters"], losses_running["pca"], label='pca')
     ax[1, 1].plot(losses_running["iters"], losses_running["G"], label='G')
-    ax[1, 1].plot(losses_running["iters"], losses_running["D"], label='D')
+    # ax[1, 1].plot(losses_running["iters"], losses_running["D"], label='D')
     ax[1, 1].plot(losses_running["iters"], losses_running["Content"], label='content')
     ax[1, 1].set_title("Losses")
     ax[1, 1].set_xlabel("Iteration")
