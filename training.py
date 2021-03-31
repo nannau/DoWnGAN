@@ -93,7 +93,9 @@ class Trainer():
         self.losses['pca'].append(eofloss)
 
         # get content loss
-        content_loss = self._content_loss(cr, generated_data)
+        # content_loss = self._content_loss(cr, generated_data)
+        content_loss = self._content_loss(hr, generated_data)
+
         self.losses['Content'].append(content_loss.item())
 
         # Calculate loss and optimize
@@ -102,7 +104,7 @@ class Trainer():
 
         gamma = 0.01
         # g_loss = ((1-gamma/2)*eofloss + (1-gamma/2)*content_loss + gamma*g_loss)
-        g_loss = (eofloss + content_loss + gamma*g_loss)
+        g_loss = (eofloss/11 + content_loss + gamma*g_loss)
 
         g_loss.backward()
         self.G_opt.step()
@@ -113,17 +115,18 @@ class Trainer():
         del content_loss
         del eofloss
 
-    def _content_loss(self, cr, generated_data):
+    def _content_loss(self, hr, generated_data):
         # Question is content loss compared to 
         # LR data or HR data? I've seen both.
 
         # Get generated data
-        avg_pool = nn.AvgPool2d(4, stride=4)
-        gen_lr = avg_pool(generated_data)
+        # avg_pool = nn.AvgPool2d(4, stride=4)
+        # gen_lr = avg_pool(generated_data)
 
         criterion_pixelwise = nn.L1Loss().to(self.device)
 
-        content_loss = criterion_pixelwise(cr, gen_lr)
+        # content_loss = criterion_pixelwise(cr, gen_lr)
+        content_loss = criterion_pixelwise(hr, generated_data)
 
         return content_loss
 

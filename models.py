@@ -88,17 +88,17 @@ class ResidualBlock(nn.Module):
         """
         super(ResidualBlock, self).__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(channels)
+        # self.bn1 = nn.BatchNorm2d(channels)
         self.prelu = nn.PReLU()
         self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(channels)
+        # self.bn2 = nn.BatchNorm2d(channels)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         out = self.conv1(input)
-        out = self.bn1(out)
+        # out = self.bn1(out)
         out = self.prelu(out)
         out = self.conv2(out)
-        out = self.bn2(out)
+        # out = self.bn2(out)
 
         return out + input
 
@@ -116,31 +116,31 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
             nn.Conv2d(self.coarse_dim, self.coarse_dim, kernel_size=3, stride=2, padding=1, bias=False),  # state size. (64) x 48 x 48
-            nn.BatchNorm2d(self.coarse_dim),
+            # nn.BatchNorm2d(self.coarse_dim),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
             nn.Conv2d(self.coarse_dim, 2*self.coarse_dim, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(2*self.coarse_dim),
+            # nn.BatchNorm2d(2*self.coarse_dim),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
             nn.Conv2d(2*self.coarse_dim, 2*self.coarse_dim, kernel_size=3, stride=2, padding=1, bias=False),  # state size. (128) x 24 x 24
-            nn.BatchNorm2d(2*self.coarse_dim),
+            # nn.BatchNorm2d(2*self.coarse_dim),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
             nn.Conv2d(2*self.coarse_dim, 4*self.coarse_dim, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(4*self.coarse_dim),
+            # nn.BatchNorm2d(4*self.coarse_dim),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
             nn.Conv2d(4*self.coarse_dim, 4*self.coarse_dim, kernel_size=3, stride=2, padding=1, bias=False),  # state size. (256) x 12 x 12
-            nn.BatchNorm2d(4*self.coarse_dim),
+            # nn.BatchNorm2d(4*self.coarse_dim),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
             nn.Conv2d(4*self.coarse_dim, 8*self.coarse_dim, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(8*self.coarse_dim),
+            # nn.BatchNorm2d(8*self.coarse_dim),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
             nn.Conv2d(8*self.coarse_dim, 8*self.coarse_dim, kernel_size=3, stride=2, padding=1, bias=False),  # state size. (512) x 6 x 6
-            nn.BatchNorm2d(8*self.coarse_dim),
+            # nn.BatchNorm2d(8*self.coarse_dim),
             nn.LeakyReLU(negative_slope=0.2, inplace=True)
         )
 
@@ -158,3 +158,36 @@ class Discriminator(nn.Module):
 
         return out
 
+
+import torch.nn.functional as F
+
+
+class patch_discriminator(nn.Module):
+    # initializers
+    def __init__(self, d=64):
+        super(patch_discriminator, self).__init__()
+        self.conv1 = nn.Conv2d(6, d, 4, 2, 1)
+        self.conv2 = nn.Conv2d(d, d * 2, 4, 2, 1)
+        self.conv2_bn = nn.BatchNorm2d(d * 2)
+        self.conv3 = nn.Conv2d(d * 2, d * 4, 4, 2, 1)
+        self.conv3_bn = nn.BatchNorm2d(d * 4)
+        self.conv4 = nn.Conv2d(d * 4, d * 8, 4, 1, 1)
+        self.conv4_bn = nn.BatchNorm2d(d * 8)
+        self.conv5 = nn.Conv2d(d * 8, 1, 4, 1, 1)
+
+    # weight_init
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
+
+    # forward method
+    def forward(self, input):
+        x = input#torch.Tensor(input, device=self.device)
+        # x = torch.cat([input, label], 1)
+        x = F.leaky_relu(self.conv1(x), 0.2)
+        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
+        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
+        x = F.leaky_relu(self.conv4_bn(self.conv4(x)), 0.2)
+        x = F.sigmoid(self.conv5(x))
+
+        return x
