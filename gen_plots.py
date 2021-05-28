@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 import torch
-
+import mlflow
 
 def colorize(value, vmin=None, vmax=None, cmap=None):
     """
@@ -41,7 +41,7 @@ def colorize(value, vmin=None, vmax=None, cmap=None):
     return value
 
 
-def plot_to_tensorboard(writer, fig, step):
+def plot_to_tensorboard(fig, step):
     """
     Takes a matplotlib figure handle and converts it using
     canvas and string-casts to a numpy array that can be
@@ -65,50 +65,56 @@ def plot_to_tensorboard(writer, fig, step):
     img = np.swapaxes(np.swapaxes(img, 0, 2), 1, 2) # if your TensorFlow + TensorBoard version are >= 1.8
 
     # Add figure in numpy "image" to TensorBoard writer
-    writer.add_image('Results', img, step)
+    # writer.add_image('Results', img, step)
+    plt.savefig("artifacts/image.png")
     plt.close(fig)
 
 
-def write_to_board(writer, fixed, loss_path):
-    state = torch.load(loss_path)
-    losses_running = state["losses_running"]
-    loss_dict = state["losses_instance"]
+def generate_plots(fixed):
+    # state = torch.load(loss_path)
+    # losses_running = state["losses_running"]
+    # loss_dict = state["losses_instance"]
 
-    writer.add_scalars('Losses', loss_dict, loss_dict["iters"])
+    # writer.add_scalars('Losses', loss_dict, loss_dict["iters"])
 
     fake = fixed["fake"]
     real = fixed["real"]
     coarse = fixed["coarse"]
 
-    plt.style.use(['science','no-latex'])
-    plt.rcParams.update({"figure.figsize":  (5,10),
-                        'font.family': 'Times New Roman',
-                        'font.size': 25,
-                        'lines.linewidth': 2.5})
+#     plt.style.use(['science','no-latex'])
+#     plt.rcParams.update({"figure.figsize":  (5,10),
+#                         'font.family': 'Times New Roman',
+#                         'font.size': 25,
+#                         'lines.linewidth': 2.5})
 
-    fig, ax = plt.subplots(2, 2, figsize=(15, 15), subplot_kw=dict(box_aspect=1))
+    fig, ax = plt.subplots(1, 3, figsize=(15, 15), subplot_kw=dict(box_aspect=1))
 
-    cax = ax[0, 0].imshow(fake[0, 0, ...], cmap="viridis")
-    ax[0, 0].set_title("Generated")
+    cax = ax[0].imshow(fake[0, 0, ...], cmap="viridis", origin="lower")
+    ax[0].set_title("Generated")
 
-    cax2 = ax[0, 1].imshow(real[0, 0, ...], cmap="viridis")
-    ax[0, 1].set_title("Ground Truth")
+    cax2 = ax[1].imshow(real[0, 0, ...], cmap="viridis", origin="lower")
+    ax[1].set_title("Ground Truth")
 
-    cax3 = ax[1, 0].imshow(coarse[0, 0, ...], cmap="viridis")
-    ax[1, 0].set_title("Coarse")
+    cax3 = ax[2].imshow(coarse[0, 0, ...], cmap="viridis", origin="lower")
+    ax[2].set_title("Coarse")
 
-    ax[1, 1].plot(losses_running["iters"], losses_running["pca"], label='pca')
-    ax[1, 1].plot(losses_running["iters"], losses_running["G"], label='G')
-    ax[1, 1].plot(losses_running["iters"], losses_running["D"], label='D')
-    ax[1, 1].plot(losses_running["iters"], losses_running["Content"], label='content')
-    ax[1, 1].set_title("Losses")
-    ax[1, 1].set_xlabel("Iteration")
-    ax[1, 1].set_title("Loss")
-    ax[1, 1].legend()
+    # ax[1, 1].plot(losses_running["iters"], losses_running["pca"], label='pca')
+    # ax[1, 1].plot(losses_running["iters"], losses_running["G"], label='G')
+    # ax[1, 1].plot(losses_running["iters"], losses_running["D"], label='D')
+    # ax[1, 1].plot(losses_running["iters"], losses_running["Content"], label='content')
+    # ax[1, 1].plot(losses_running["iters"], losses_running["D"].cpu(), label='Wasserstein Estimate')
+    # ax[1, 1].set_title("Losses")
+    # ax[1, 1].set_xlabel("Iteration")
+    # ax[1, 1].set_title("Loss")
+    # ax[1, 1].legend()
 
-    plt.colorbar(cax, ax=ax[0, 0], fraction=0.022)
-    plt.colorbar(cax2, ax=ax[0, 1], fraction=0.022)
-    plt.colorbar(cax3, ax=ax[1, 0], fraction=0.022)
+    plt.colorbar(cax, ax=ax[0], fraction=0.022)
+    plt.colorbar(cax2, ax=ax[1], fraction=0.022)
+    plt.colorbar(cax3, ax=ax[2], fraction=0.022)
 
     plt.tight_layout()
-    plot_to_tensorboard(writer, fig, loss_dict["iters"])
+    plt.savefig("artifacts/train_snap.png")
+    plt.close(fig)
+    mlflow.log_artifact("artifacts/train_snap.png")
+
+    # plot_to_tensorboard(writer, fig, loss_dict["iters"])

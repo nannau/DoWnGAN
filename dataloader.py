@@ -34,9 +34,10 @@ class NetCDFSR(Dataset):
         arr = self.fine[idx, ...]
         carr = self.coarse[idx, ...]
 
-        arr = torch.unsqueeze(arr, 0)
-        carr = torch.unsqueeze(carr, 0)
+        # arr = torch.unsqueeze(arr, 0)
+        # carr = torch.unsqueeze(carr, 0)
         pcas_arr = torch.unsqueeze(self.pcas, 0)
+        # pcas_arr = self.pcas
 
         return arr, carr, pcas_arr
 

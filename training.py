@@ -1,5 +1,11 @@
+from utils import mlflow_dict_logger
+from losses import eof_loss, vorticity_loss, divergence_loss, content_loss
 import time
+import logging
+import subprocess
 import numpy as np
+from csv import DictWriter
+import csv
 
 from torch.nn.functional import avg_pool2d
 from torchvision.utils import make_grid
@@ -9,126 +15,146 @@ from torch.utils.tensorboard import SummaryWriter
 
 import torch
 import torch.nn as nn
-from gen_plots import write_to_board
+from gen_plots import generate_plots
+from mlflow import log_metric, log_param, log_artifacts
+from mlflow.tracking import MlflowClient
+import mlflow
+
+from memory_profiler import profile
 
 class Trainer():
-    def __init__(self, generator, discriminator, gen_optimizer, dis_optimizer, device,
-                 gp_weight=10, critic_iterations=5, print_every=10, save_every=5000,
-                 use_cuda=True):
-        self.G = generator
-        self.G_opt = gen_optimizer
-        self.D = discriminator
-        self.D_opt = dis_optimizer
-        self.losses = {'G': [], 'D': [], 'GP': [], 'gradient_norm': [], 'Content': [], 'pca': []}
+    """Implementation of custom Wasserstein GAN with Gradient Penalty.
+    See below for expected keys
+    Args:
+        models, dict: Dictionary containing critic and discriminator
+        device, pytorch.cuda.device: GPU or CPU of host machine
+        hyp_params, dict: Containing hyperparameters of run
+        run_params, dict: Containing technical parameters and logging of run
+
+    """
+    def __init__(self, models: dict, hyper_params: dict, run_params: dict, experiment, tag):
+        self.experiment = experiment
+        self.tag = tag
+        self.client = MlflowClient()
+
+        self.G = models["generator"]
+        self.C = models["critic"]
+        self.G_opt = models["gen_optimizer"]
+        self.C_opt = models["critic_optimizer"]
+
+        self.hyper_params = hyper_params
+        self.gp_weight = hyper_params["gp_weight"]
+        self.critic_iterations = hyper_params["critic_iterations"]
+        self.batch_size = hyper_params["batch_size"]
+        self.gamma = hyper_params["gamma"]
+        self.eof_weight = hyper_params["eof_weight"]
+        self.div_weight = hyper_params["div_weight"]
+        self.vort_weight = hyper_params["vort_weight"]
+        self.content_weight = hyper_params["content_weight"]
+
+        self.epochs = run_params["epochs"]
+        self.print_every = run_params["print_every"]
+        self.save_every = run_params["save_every"]
+        self.use_cuda = run_params["use_cuda"]
+        self.device = run_params["device"]
+
         self.num_steps = 0
-        self.use_cuda = use_cuda
-        self.gp_weight = gp_weight
-        self.critic_iterations = critic_iterations
-        self.print_every = print_every
-        self.save_every = save_every
-        self.device = device
+
+        self.metrics = {}
 
         assert next(self.G.parameters()).is_cuda
-        assert next(self.D.parameters()).is_cuda
+        assert next(self.C.parameters()).is_cuda
+
+
+    def _metric_log_every_n(self, name_of_metric, metric_to_log):
+        if self.num_steps % self.save_every == 0 and self.num_steps > self.critic_iterations:
+            log_metric(name_of_metric, metric_to_log)
+            self._metric_print(name_of_metric, metric_to_log)
+
+    def _metric_print(self, name_of_metric, metric_to_log):
+        logging.basicConfig(format='%(asctime)s %(message)s')
+        logging.info(f"{name_of_metric}: {metric_to_log}")
 
     def _critic_train_iteration(self, cr, hr):
         """ """
+
         # Get generated data
-        batch_size = cr.size()[0]
         generated_data = self.G(cr)
 
         # Calculate probabilities on real and generated data
         data = Variable(hr, requires_grad=True)
 
-        d_real = self.D(data)
-        d_generated = self.D(generated_data)
+        d_real = self.C(data)
+        d_generated = self.C(generated_data)
 
         # Get gradient penalty
         gradient_penalty = self._gradient_penalty(data, generated_data)
-        self.losses['GP'].append(gradient_penalty.item())
+        self.metrics["Gradient Penalty"] = gradient_penalty.item()
 
         # Create total loss and optimize
-        self.D_opt.zero_grad()
-        d_loss = d_generated.mean() - d_real.mean() + gradient_penalty
-        d_loss.backward()
+        self.C_opt.zero_grad()
+        d_generated_mean = d_generated.mean()
+        d_real_mean = d_real.mean()
 
-        self.D_opt.step()
+        d_loss = d_generated_mean - d_real_mean + gradient_penalty
+        w_estimate = -d_generated_mean + d_real_mean
 
         # Record loss
-        self.losses['D'].append(d_loss.item())
+        self.metrics["Wasserstein Distance Estimate"] = w_estimate.item()
 
-        del d_loss
-        del gradient_penalty
+        d_loss.backward()
+        self.C_opt.step()
 
-    def _eof_loss(self, X, hr, fake):
-        # Load PCA LHS
-        real = torch.reshape(
-            hr, 
-            (hr.size(0), hr.size(1), hr.size(2)*hr.size(3))
-        )
-
-        fake = torch.reshape(
-            fake, 
-            (fake.size(0), fake.size(1), fake.size(2)*fake.size(3))
-        )
-
-        projected_real = torch.matmul(real, X.transpose(3, 2)).transpose(0, 1)
-        projected_fake = torch.matmul(fake, X.transpose(3, 2)).transpose(0, 1)
-
-        coefficient_loss = nn.L1Loss().to(self.device)
-        closs = coefficient_loss(projected_fake, projected_real).item()
-        return closs
-
+        # Cleanup
+        to_del = [d_loss, gradient_penalty, d_generated, d_real, data, d_generated_mean, d_real_mean, w_estimate]
+        for var in to_del:
+            del var
 
     def _generator_train_iteration(self, cr, hr, pcas):
         """ """
         self.G_opt.zero_grad()
 
         # Get generated data
-        batch_size = cr.size()[0]
         generated_data = self.G(cr)
 
-        X = pcas[:1, ...]
-        eofloss = self._eof_loss(X, hr, generated_data)
-        self.losses['pca'].append(eofloss)
+        X = pcas[0, :2, ...]
+        eofloss = eof_loss(X, hr[:, :2, ...], generated_data[:, :2, ...], self.device)
+        self.metrics["EOF Coefficient L2"] = eofloss
+        
+        divloss = divergence_loss(hr, generated_data, self.device)
+        self.metrics["Divergence L2"] = divloss
+
+        vortloss = vorticity_loss(hr, generated_data, self.device)
+        self.metrics["Vorticity L2"] = vortloss
 
         # get content loss
-        content_loss = self._content_loss(cr, generated_data)
-        self.losses['Content'].append(content_loss.item())
+        cont_loss = content_loss(hr, generated_data, self.device)
+        self.metrics["Content L2"] = cont_loss.item()
 
         # Calculate loss and optimize
-        d_generated = self.D(generated_data)
+        d_generated = self.C(generated_data)
         g_loss = - d_generated.mean()
 
-        gamma = 0.01
-        # g_loss = ((1-gamma/2)*eofloss + (1-gamma/2)*content_loss + gamma*g_loss)
-        g_loss = (eofloss + content_loss + gamma*g_loss)
+        g_loss = (
+            self.eof_weight*eofloss + 
+            self.vort_weight*vortloss + 
+            self.div_weight*divloss + 
+            self.content_weight*cont_loss + 
+            self.gamma*g_loss
+        )
 
         g_loss.backward()
         self.G_opt.step()
+
         # Record loss
-        self.losses['G'].append(g_loss.item())
+        self.metrics["Generator loss"] = g_loss.item()
 
-        del g_loss
-        del content_loss
-        del eofloss
-
-    def _content_loss(self, cr, generated_data):
-        # Question is content loss compared to 
-        # LR data or HR data? I've seen both.
-
-        # Get generated data
-        avg_pool = nn.AvgPool2d(4, stride=4)
-        gen_lr = avg_pool(generated_data)
-
-        criterion_pixelwise = nn.L1Loss().to(self.device)
-
-        content_loss = criterion_pixelwise(cr, gen_lr)
-
-        return content_loss
-
+        to_del = [g_loss, cont_loss, eofloss, vortloss, divloss, d_generated]
+        for var in to_del:
+            del var
 
     def _gradient_penalty(self, real_data, generated_data):
+        # batch_size = self.batch_size
         batch_size = real_data.size()[0]
 
         # Calculate interpolation
@@ -139,7 +165,7 @@ class Trainer():
         interpolated = Variable(interpolated, requires_grad=True)
 
         # Calculate probability of interpolated examples
-        prob_interpolated = self.D(interpolated)#.to(self.device)
+        prob_interpolated = self.C(interpolated)#.to(self.device)
 
         # Calculate gradients of probabilities with respect to examples
         gradients = torch_grad(outputs=prob_interpolated, inputs=interpolated,
@@ -148,18 +174,24 @@ class Trainer():
 
         # Gradients have shape (batch_size, num_channels, img_width, img_height),
         # so flatten to easily take norm per example in batch
-        gradients = gradients.view(batch_size, -1)#.to(self.device)
-
-        self.losses['gradient_norm'].append(gradients.norm(2, dim=1).mean().detach().cpu())
+        gradients = gradients.view(batch_size, -1).to(self.device)
+        # gnorm = gradients.norm(2, dim=1).mean().detach().cpu()
+        # self.losses['gradient_norm'].append(gradients.norm(2, dim=1).mean().detach().cpu())
+        # metric_log_every_n("Gradient Norm L2", gnorm)
 
         # Derivatives of the gradient close to 0 can cause problems because of
         # the square root, so manually calculate norm and add epsilon
         gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
+        # self._metric_log_every_n("Gradient Norm L2", gradients_norm.mean().item())#detach().cpu())
+
+
 
         # Return gradient penalty
         return self.gp_weight * ((gradients_norm - 1) ** 2).mean()
 
-    def _train_epoch(self, data_loader, fixed, writer, epoch, loss_path):
+
+    def _train_epoch(self, data_loader, fixed, epoch):
+
         for i, data in enumerate(data_loader):
 
             hr = data[0].clone().detach().requires_grad_(True).to(self.device)
@@ -168,75 +200,52 @@ class Trainer():
 
             self.num_steps += 1
             self._critic_train_iteration(cr, hr)
+
+            result = subprocess.check_output(['bash','-c', 'free -m'])
+            free_memory = float(result.split()[9])
+            self.metrics["System Free Memory"] = free_memory
+            self.metrics["Iteration number"] = self.num_steps
+            self.metrics["GPU Memory"] = torch.cuda.memory_allocated()
+
+
             # Only update generator every |critic_iterations| iterations
             if self.num_steps % self.critic_iterations == 0:
                 self._generator_train_iteration(cr, hr, pcas)
 
-            if i % self.print_every == 0:
-                print("Iteration {}".format(i + 1))
-                print("D: {}".format(self.losses['D'][-1]))
-                print("GP: {}".format(self.losses['GP'][-1]))
-                print("Gradient norm: {}".format(self.losses['gradient_norm'][-1]))
-                print(f"cuda memory: {torch.cuda.memory_allocated()}")
+            if self.num_steps == 7:
+                with open("metrics.csv", "w") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.metrics.keys())
 
-                if self.num_steps > self.critic_iterations:
+            if self.num_steps % self.save_every == 0:
+                fixed_writer = {}
+                fixed_writer["fake"] = self.G(fixed["coarse"]).detach().cpu()
+                fixed_writer["real"] = fixed["fine"].detach().cpu()
+                fixed_writer["coarse"] = fixed["coarse"].detach().cpu()
+                generate_plots(fixed_writer)
 
-                    fixed_writer = {}
-                    fixed_writer["fake"] = self.G(fixed["coarse"]).detach().cpu()
-                    fixed_writer["real"] = fixed["fine"].detach().cpu()
-                    fixed_writer["coarse"] = fixed["coarse"].detach().cpu()
+                for key in self.metrics.keys():
+                    self._metric_log_every_n(key, self.metrics[key])
 
-                    loss_dict = {
-                        'iters': epoch*len(data_loader)+i,
-                        'D': self.losses['D'][-1],
-                        'GP': self.losses['GP'][-1],
-                        'Gradient Norm': self.losses['gradient_norm'][-1],
-                        'G': self.losses['G'][-1],
-                        'Content': self.losses['Content'][-1],
-                        'pca': self.losses['pca'][-1],
-                    }
+                with open("metrics.csv", "a") as f:
+                    metric_file = DictWriter(f, fieldnames=self.metrics.keys())
+                    metric_file.writerow(self.metrics)
+                    f.close()
 
-                    if self.num_steps > self.print_every+1:
-                        state = torch.load(loss_path)["losses_running"]
-                        for key, val in loss_dict.items():
-                            state[key].append(val)
-                    else:
-                        state = {
-                            'iters': [],
-                            'D': [],
-                            'GP': [],
-                            'Gradient Norm': [],
-                            'G': [],
-                            'Content': [],
-                            'pca': [],
-                        }
+                mlflow.log_artifact("metrics.csv")
 
-                    # Save model progress
-                    torch.save({
-                        "losses_instance": loss_dict,
-                        "discriminator": self.D.state_dict(),
-                        "generator": self.G.state_dict(),
-                        "losses_running": state
-                    }, loss_path)
-
-                    write_to_board(writer, fixed_writer, loss_path)
-
-                    print("G: {}".format(self.losses['G'][-1]))
-                    print("Content loss: {}".format(self.losses['Content'][-1]))
-                    print("EOF: ", self.losses['pca'][-1])
-
-                self.losses = {'G': [], 'D': [], 'GP': [], 'gradient_norm': [], 'Content': [], 'pca': []}
+                # Log model
+                mlflow.pytorch.log_model(self.C, "Critic")
+                mlflow.pytorch.log_state_dict(self.C.state_dict(), "Critic")                
+                mlflow.pytorch.log_model(self.G, "Generator")
+                mlflow.pytorch.log_state_dict(self.G.state_dict(), "Generator")
 
 
-    def train(self, data_loader, epochs, fixed, save_training_gif=True, loss_path="checkpoints/losses/"):
 
-        timestr = time.strftime("%Y%m%d-%H%M%S")
-        writer = SummaryWriter()
+    def train(self, data_loader, epochs, fixed):
+        logging.basicConfig(level=logging.INFO)
 
-        loss_path += timestr 
-
-
-        # Fix latents to see how image generation improves during training
+        # Fix sample to see how image generation improves during training
         fixed_coarse = Variable(fixed["coarse"], requires_grad=True)
         fixed_real = Variable(fixed["fine"], requires_grad=True)
 
@@ -244,14 +253,15 @@ class Trainer():
             fixed_coarse = fixed_coarse.to(self.device)
             fixed_real = fixed_real.to(self.device)
 
-        training_progress_images = []
+        fixed_writer = {"coarse": fixed_coarse, "fine": fixed_real}
 
-        fixed_writer = {
-            "coarse": fixed_coarse,
-            "fine": fixed_real
-        }
+        experiment_id = self.client.get_experiment_by_name(self.experiment).experiment_id
 
-        for epoch in range(epochs):
-            print("\nEpoch {}".format(epoch + 1))
-            self._train_epoch(data_loader, fixed_writer, writer, epoch, loss_path)
+        with mlflow.start_run(experiment_id=experiment_id) as run:
+            mlflow.set_tag(run.info.run_id, self.tag)
+            mlflow_dict_logger(self.hyper_params)
+            for epoch in range(self.epochs):
+                logging.basicConfig(format='%(asctime)s %(message)s')
+                logging.info(f'\nEpoch {epoch}')
+                self._train_epoch(data_loader, fixed_writer, epoch)
 
