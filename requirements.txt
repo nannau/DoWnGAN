@@ -1,0 +1,6 @@
+numpy
+matplotlib
+torch
+xarray
+netcdf4
+mlflow
