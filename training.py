@@ -3,6 +3,8 @@ from losses import eof_loss, vorticity_loss, divergence_loss, content_loss
 import time
 import logging
 import subprocess
+import tracemalloc
+
 import numpy as np
 from csv import DictWriter
 import csv
@@ -19,6 +21,8 @@ from gen_plots import generate_plots
 from mlflow import log_metric, log_param, log_artifacts
 from mlflow.tracking import MlflowClient
 import mlflow
+
+import gc
 
 from memory_profiler import profile
 
@@ -106,7 +110,7 @@ class Trainer():
         self.C_opt.step()
 
         # Cleanup
-        to_del = [d_loss, gradient_penalty, d_generated, d_real, data, d_generated_mean, d_real_mean, w_estimate]
+        to_del = [d_loss, gradient_penalty, d_generated, d_real, data, d_generated_mean, d_real_mean, w_estimate, generated_data]
         for var in to_del:
             del var
 
@@ -117,7 +121,7 @@ class Trainer():
         # Get generated data
         generated_data = self.G(cr)
 
-        X = pcas[0, :2, ...]
+        X = pcas[0, ...]
         eofloss = eof_loss(X, hr[:, :2, ...], generated_data[:, :2, ...], self.device)
         self.metrics["EOF Coefficient L2"] = eofloss
         
@@ -135,13 +139,15 @@ class Trainer():
         d_generated = self.C(generated_data)
         g_loss = - d_generated.mean()
 
-        g_loss = (
-            self.eof_weight*eofloss + 
-            self.vort_weight*vortloss + 
-            self.div_weight*divloss + 
-            self.content_weight*cont_loss + 
-            self.gamma*g_loss
-        )
+        # g_loss = (
+        #     self.eof_weight*eofloss + 
+        #     self.vort_weight*vortloss + 
+        #     self.div_weight*divloss + 
+        #     self.content_weight*cont_loss + 
+        #     self.gamma*g_loss
+        # )
+
+        g_loss = self.eof_weight*eofloss + self.content_weight*cont_loss + self.gamma*g_loss
 
         g_loss.backward()
         self.G_opt.step()
@@ -149,7 +155,7 @@ class Trainer():
         # Record loss
         self.metrics["Generator loss"] = g_loss.item()
 
-        to_del = [g_loss, cont_loss, eofloss, vortloss, divloss, d_generated]
+        to_del = [g_loss, cont_loss, eofloss, vortloss, divloss, d_generated, generated_data, X]
         for var in to_del:
             del var
 
@@ -184,7 +190,9 @@ class Trainer():
         gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
         # self._metric_log_every_n("Gradient Norm L2", gradients_norm.mean().item())#detach().cpu())
 
-
+        to_del = [gradients, prob_interpolated, interpolated, alpha]
+        for var in to_del:
+            del var
 
         # Return gradient penalty
         return self.gp_weight * ((gradients_norm - 1) ** 2).mean()
@@ -201,12 +209,11 @@ class Trainer():
             self.num_steps += 1
             self._critic_train_iteration(cr, hr)
 
-            result = subprocess.check_output(['bash','-c', 'free -m'])
-            free_memory = float(result.split()[9])
-            self.metrics["System Free Memory"] = free_memory
+            # result = subprocess.check_output(['bash','-c', 'free -m'])
+            # free_memory = float(result.split()[9])
+            # self.metrics["System Free Memory"] = free_memory
             self.metrics["Iteration number"] = self.num_steps
             self.metrics["GPU Memory"] = torch.cuda.memory_allocated()
-
 
             # Only update generator every |critic_iterations| iterations
             if self.num_steps % self.critic_iterations == 0:
@@ -216,6 +223,7 @@ class Trainer():
                 with open("metrics.csv", "w") as f:
                     writer = csv.writer(f)
                     writer.writerow(self.metrics.keys())
+                    f.close()
 
             if self.num_steps % self.save_every == 0:
                 fixed_writer = {}
@@ -239,15 +247,18 @@ class Trainer():
                 mlflow.pytorch.log_state_dict(self.C.state_dict(), "Critic")                
                 mlflow.pytorch.log_model(self.G, "Generator")
                 mlflow.pytorch.log_state_dict(self.G.state_dict(), "Generator")
+                del fixed_writer
 
-
+            to_del = [hr, cr, pcas]
+            for var in to_del:
+                del var
 
     def train(self, data_loader, epochs, fixed):
         logging.basicConfig(level=logging.INFO)
 
         # Fix sample to see how image generation improves during training
-        fixed_coarse = Variable(fixed["coarse"], requires_grad=True)
-        fixed_real = Variable(fixed["fine"], requires_grad=True)
+        fixed_coarse = Variable(fixed["coarse"], requires_grad=False)
+        fixed_real = Variable(fixed["fine"], requires_grad=False)
 
         if self.use_cuda:
             fixed_coarse = fixed_coarse.to(self.device)
@@ -256,12 +267,22 @@ class Trainer():
         fixed_writer = {"coarse": fixed_coarse, "fine": fixed_real}
 
         experiment_id = self.client.get_experiment_by_name(self.experiment).experiment_id
+        
 
         with mlflow.start_run(experiment_id=experiment_id) as run:
             mlflow.set_tag(run.info.run_id, self.tag)
             mlflow_dict_logger(self.hyper_params)
+
+
             for epoch in range(self.epochs):
                 logging.basicConfig(format='%(asctime)s %(message)s')
                 logging.info(f'\nEpoch {epoch}')
-                self._train_epoch(data_loader, fixed_writer, epoch)
 
+                tracemalloc.start()
+                self._train_epoch(data_loader, fixed_writer, epoch)
+                current, peak = tracemalloc.get_traced_memory()
+                self.metrics["System Free Memory Peak MB"] = peak/10**6
+                logging.info(f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+
+                tracemalloc.stop()
+                gc.collect()
