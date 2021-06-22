@@ -23,7 +23,7 @@ class Generator(nn.Module):
 
         # Residual blocks.
         residual_blocks = []
-        for _ in range(32):
+        for _ in range(16):
             residual_blocks.append(ResidualBlock(self.coarse_dim))
         self.Trunk = nn.Sequential(*residual_blocks)
 

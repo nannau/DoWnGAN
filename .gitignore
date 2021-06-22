@@ -1,1 +1,5 @@
 runs/
+notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints/
+__pycache__
+DoWnGAN.egg-info

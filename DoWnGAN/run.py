@@ -1,6 +1,7 @@
 from dataloader import NetCDFSR, xr_standardize_field
 import xarray as xr
 import numpy as np
+import pandas as pd
 import glob
 import torch
 from prep_gan import find_nearest_index, to_utc
@@ -18,7 +19,7 @@ from models.critic import Critic
 
 torch.cuda.empty_cache()
 import dask
-def run_it():	
+def run_it():
 	dask.config.set({"array.slicing.split_large_chunks": True})
 
 	device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
@@ -65,13 +66,19 @@ def run_it():
 	    hours = int(np.round(24*float(str(float(t))[8:])))
 	    Times_dt.append(np.datetime64(datetime.datetime(year, month, day, hours)))
 	Times_dt = np.array(Times_dt).astype('datetime64[D]')
+	Times_dt_pd = pd.DatetimeIndex(Times_dt)
 
-	u10 = fine_u.U10[1:18000, sf*low:sf*up, sf*l:sf*r]
-	v10 = fine_v.V10[1:18000, sf*low:sf*up, sf*l:sf*r]
+	filter_func = np.vectorize(lambda x: True if x.month in [6, 7, 8, 9, 10] else False)
+	time_mask = filter_func(Times_dt_pd.astype(object))
+	time_mask = np.ones(Times_dt.shape[0]) != 1
+	time_mask[1:18000] = True
+
+	u10 = fine_u.U10[time_mask, sf*low:sf*up, sf*l:sf*r]
+	v10 = fine_v.V10[time_mask, sf*low:sf*up, sf*l:sf*r]
 	# fmask = np.repeat(fine_mask.LANDMASK.values[0, sf*low:sf*up, sf*l:sf*r][np.newaxis, :, :], u10.shape[0], axis=0)
 
-	coarse_u10_patch = coarse_u10[1:18000, low:up, l:r]
-	coarse_v10_patch = coarse_v10[1:18000, low:up, l:r]
+	coarse_u10_patch = coarse_u10[time_mask, low:up, l:r]
+	coarse_v10_patch = coarse_v10[time_mask, low:up, l:r]
 	# cmask = np.repeat(coarse_mask.values[low:up, l:r][np.newaxis, :, :], u10.shape[0], axis=0)
 
 	u10 = xr_standardize_field(u10)
@@ -79,12 +86,15 @@ def run_it():
 	coarse_u10_patch =  xr_standardize_field(coarse_u10_patch)
 	coarse_v10_patch =  xr_standardize_field(coarse_v10_patch)
 
+	# #Random fine
+	# rand_fine = xr.DataArray(np.random.uniform(-1, 1, u10.shape), coords=u10.coords)
+	# #Random coarse
+	# rand_coarse = xr.DataArray(np.random.uniform(-1, 1, coarse_u10_patch.shape), coords=coarse_u10_patch.coords)
+	coarse = np.stack([coarse_u10_patch, coarse_v10_patch], axis=1)
+	fine = np.stack([u10, v10], axis=1)
 
-	print(u10.shape)
-
-
-	coarse = xr.concat([coarse_u10_patch, coarse_v10_patch], dim="var").transpose('time', 'var', 'latitude', 'longitude')
-	fine = xr.concat([u10, v10], dim="var").transpose('Times', 'var', 'lat', 'lon')
+	# coarse = xr.concat([coarse_u10_patch, coarse_v10_patch], dim="var").transpose('time', 'var', 'latitude', 'longitude')
+	# fine = xr.concat([u10, v10], dim="var").transpose('Times', 'var', 'lat', 'lon')
 
 	del coarse_u10_patch
 	del coarse_v10_patch
@@ -95,30 +105,52 @@ def run_it():
 	pca = PCA(n_components=ncomp)
 	pca.fit(fine_pca_u10)
 	fine_sp_basis_u10 = pca.components_.reshape(ncomp, u10.shape[1]*u10.shape[2])/pca.explained_variance_[:, np.newaxis]
+	Zu = pca.transform(fine_pca_u10)
+	# Zu = pca.transform(Xu)
+	# u10_low = np.array([np.matmul(pca.components_.T, Zu[i, ...]).reshape(u10.shape[1], u10.shape[2]) for i in range(Zu.shape[0])])
+	pcau_comp = pca.components_
+
 	del fine_pca_u10
 	# fine_sp_basis_u10 = np.divide(fine_sp_basis_u10, pca.explained_variance_)
+
 
 	fine_pca_v10 = np.array(fine[:, 1, ...]).reshape(v10.shape[0], v10.shape[1]*v10.shape[2])
 	pca = PCA(n_components=ncomp)
 	pca.fit(fine_pca_v10)
+	Zv = pca.transform(fine_pca_v10)
+	# Zv = pca.transform(Xv)
+	# v10_low = np.array([np.matmul(pca.components_.T, Zv[i, ...]).reshape(v10.shape[1], v10.shape[2]) for i in range(Zv.shape[0])])
+	pcav_comp = pca.components_
 	del fine_pca_v10
+
 
 	fine_sp_basis_v10 = pca.components_.reshape(ncomp, v10.shape[1]*v10.shape[2])/pca.explained_variance_[:, np.newaxis]
 	fine_sp_basis = np.stack([fine_sp_basis_u10, fine_sp_basis_v10], axis=1)
+	# low_uv10 = np.stack([u10_low, v10_low])
 	del fine_sp_basis_v10
 	del fine_sp_basis_u10
 
+	Zstack = np.stack([Zu, Zv], axis=1)
+
 
 	fine_t = torch.from_numpy(np.array(fine)).float()
+	# fine_t_low = torch.from_numpy(np.array(low_uv10))
+	# del low_uv10
+	# fine_t_high = fine_t - fine_t_low
+
 	coarse_t = torch.from_numpy(np.array(coarse)).float()
 	pcas_t = torch.from_numpy(fine_sp_basis).float()
-	pcas_t.size(), coarse_t.size(), pcas_t.dtype, coarse_t.dtype
+	pca_og_shape = torch.from_numpy(np.stack([pcau_comp, pcav_comp], axis=1))
+	Z_t = torch.from_numpy(Zstack).float()
+
+
 
 	del u10
 	del v10
 	del fine_sp_basis
 	del coarse
 	del fine
+	del Zstack
 
 	device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 	batch_size = 64
@@ -126,6 +158,8 @@ def run_it():
 	    fine_t,
 	    coarse_t,
 	    pcas_t,
+	    pca_og_shape,
+	    Z_t,
 	    device=device
 	)
 
@@ -135,10 +169,8 @@ def run_it():
 	    shuffle=True
 	)
 
-	real_batch, real_cbatch, pcas = next(iter(dataloader))
+	real_batch, real_cbatch, pcas, pcas_og_shape, Zs = next(iter(dataloader))
 	fixed = {"coarse": real_cbatch[:2, ...], "fine": real_batch[:2, ...]}
-	pcas.size()
-	pcas.shape, fixed["coarse"].shape, fixed["fine"].shape
 
 
 	critic = Critic(16, 128, 2).to(device)

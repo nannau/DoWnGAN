@@ -1,5 +1,5 @@
 from utils import mlflow_dict_logger
-from losses import eof_loss, vorticity_loss, divergence_loss, content_loss
+from losses import MedianPool2d, eof_loss, vorticity_loss, divergence_loss, content_loss, low_pass_eof_batch
 import time
 import logging
 import subprocess
@@ -45,6 +45,7 @@ class Trainer():
         self.C = models["critic"]
         self.G_opt = models["gen_optimizer"]
         self.C_opt = models["critic_optimizer"]
+        self.low = low_pass_eof_batch
 
         self.hyper_params = hyper_params
         self.gp_weight = hyper_params["gp_weight"]
@@ -79,20 +80,26 @@ class Trainer():
         logging.basicConfig(format='%(asctime)s %(message)s')
         logging.info(f"{name_of_metric}: {metric_to_log}")
 
-    def _critic_train_iteration(self, cr, hr):
+    def _critic_train_iteration(self, cr, hr, pca_og_shape, Z):
         """ """
 
         # Get generated data
         generated_data = self.G(cr)
+        gen_low = self.low(Z.to(self.device), pca_og_shape.to(self.device), generated_data)
+        high_pass = generated_data - gen_low
+        high_pass_truth = hr - self.low(Z, pca_og_shape, hr)
 
         # Calculate probabilities on real and generated data
-        data = Variable(hr, requires_grad=True)
+        # data = Variable(hr, requires_grad=True)
+        data = Variable(high_pass_truth, requires_grad=True)
 
         d_real = self.C(data)
-        d_generated = self.C(generated_data)
+        # d_generated = self.C(generated_data)
+        d_generated = self.C(high_pass)
 
         # Get gradient penalty
-        gradient_penalty = self._gradient_penalty(data, generated_data)
+        # gradient_penalty = self._gradient_penalty(data, generated_data)
+        gradient_penalty = self._gradient_penalty(data, high_pass)
         self.metrics["Gradient Penalty"] = gradient_penalty.item()
 
         # Create total loss and optimize
@@ -110,16 +117,22 @@ class Trainer():
         self.C_opt.step()
 
         # Cleanup
-        to_del = [d_loss, gradient_penalty, d_generated, d_real, data, d_generated_mean, d_real_mean, w_estimate, generated_data]
+        to_del = [d_loss, gradient_penalty, d_generated, d_real, data, d_generated_mean, d_real_mean, w_estimate, generated_data, high_pass_truth, high_pass, gen_low]
         for var in to_del:
             del var
 
-    def _generator_train_iteration(self, cr, hr, pcas):
+    def _generator_train_iteration(self, cr, hr, pcas, pca_og_shape, Z):
         """ """
         self.G_opt.zero_grad()
 
+        truth_low = self.low(Z.to(self.device), pca_og_shape.to(self.device), hr)
+
+
         # Get generated data
         generated_data = self.G(cr)
+
+        gen_low = self.low(Z.to(self.device), pca_og_shape.to(self.device), generated_data)
+        high_pass = generated_data - gen_low
 
         X = pcas[0, ...]
         eofloss = eof_loss(X, hr[:, :2, ...], generated_data[:, :2, ...], self.device)
@@ -132,11 +145,17 @@ class Trainer():
         self.metrics["Vorticity L2"] = vortloss
 
         # get content loss
-        cont_loss = content_loss(hr, generated_data, self.device)
+        # cont_loss = content_loss(hr, generated_data, self.device)
+        # self.metrics["Content L2"] = cont_loss.item()
+
+        # Content loss on low pass
+        cont_loss = content_loss(truth_low, gen_low, self.device)
         self.metrics["Content L2"] = cont_loss.item()
 
         # Calculate loss and optimize
-        d_generated = self.C(generated_data)
+        # d_generated = self.C(generated_data)
+        # High freq only
+        d_generated = self.C(high_pass)
         g_loss = - d_generated.mean()
 
         # g_loss = (
@@ -155,7 +174,7 @@ class Trainer():
         # Record loss
         self.metrics["Generator loss"] = g_loss.item()
 
-        to_del = [g_loss, cont_loss, eofloss, vortloss, divloss, d_generated, generated_data, X]
+        to_del = [g_loss, cont_loss, eofloss, vortloss, divloss, d_generated, generated_data, X, gen_low, truth_low, high_pass]
         for var in to_del:
             del var
 
@@ -199,15 +218,23 @@ class Trainer():
 
 
     def _train_epoch(self, data_loader, fixed, epoch):
-
         for i, data in enumerate(data_loader):
 
             hr = data[0].clone().detach().requires_grad_(True).to(self.device)
+            # hr = torch.cat((hr, torch.randn(hr.size(0), 1, hr.size(2), hr.size(3)).to(self.device)), dim=1) # Add for stochasticity
+            # low_hr = data[1].clone().detach().requires_grad_(True).to(self.device)
+            # high_hr = data[2].clone().detach().requires_grad_(True).to(self.device)
+
             cr = data[1].clone().detach().requires_grad_(True).to(self.device)
+            # cr = torch.cat((cr, torch.randn(cr.size(0), 1, cr.size(2), cr.size(3)).to(self.device)), dim=1) # Add for stochasticity
             pcas = data[2].clone().detach().requires_grad_(True).to(self.device)
 
+            pca_og_shape = data[3].clone().detach().requires_grad_(True).to(self.device)
+
+            Z = data[4].clone().detach().requires_grad_(True).to(self.device)
+
             self.num_steps += 1
-            self._critic_train_iteration(cr, hr)
+            self._critic_train_iteration(cr, hr, pca_og_shape, Z)
 
             # result = subprocess.check_output(['bash','-c', 'free -m'])
             # free_memory = float(result.split()[9])
@@ -217,7 +244,7 @@ class Trainer():
 
             # Only update generator every |critic_iterations| iterations
             if self.num_steps % self.critic_iterations == 0:
-                self._generator_train_iteration(cr, hr, pcas)
+                self._generator_train_iteration(cr, hr, pcas, pca_og_shape, Z)
 
             if self.num_steps == 7:
                 with open("metrics.csv", "w") as f:
@@ -230,6 +257,9 @@ class Trainer():
                 fixed_writer["fake"] = self.G(fixed["coarse"]).detach().cpu()
                 fixed_writer["real"] = fixed["fine"].detach().cpu()
                 fixed_writer["coarse"] = fixed["coarse"].detach().cpu()
+                # fixed_writer["fake"] = self.G(cr).detach().cpu()
+                # fixed_writer["real"] = hr.detach().cpu()
+                # fixed_writer["coarse"] = cr.detach().cpu()
                 generate_plots(fixed_writer)
 
                 for key in self.metrics.keys():

@@ -39,18 +39,17 @@ class Critic(nn.Module):
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
 
-            nn.Conv2d(8*self.coarse_dim, 16*self.coarse_dim, kernel_size=3, stride=1, padding=1, bias=False),  # state size. (512) x 6 x 6
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            # nn.Conv2d(8*self.coarse_dim, 16*self.coarse_dim, kernel_size=3, stride=1, padding=1, bias=False),  # state size. (512) x 6 x 6
+            # nn.LeakyReLU(negative_slope=0.2, inplace=True),
 
-
-            nn.Conv2d(16*self.coarse_dim, 16*self.coarse_dim, kernel_size=3, stride=2, padding=1, bias=False),  # state size. (1024) x 3 x 3
-            nn.LeakyReLU(negative_slope=0.2, inplace=True)
+            # nn.Conv2d(16*self.coarse_dim, 16*self.coarse_dim, kernel_size=3, stride=2, padding=1, bias=False),  # state size. (1024) x 3 x 3
+            # nn.LeakyReLU(negative_slope=0.2, inplace=True)
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(16*16*self.coarse_dim, 1024),
+            nn.Linear(512*self.coarse_dim, 100),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
-            nn.Linear(1024, 1),
+            nn.Linear(100, 1),
         )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
