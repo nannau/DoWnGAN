@@ -29,7 +29,7 @@ setup(
     scripts=[
         "DoWnGAN/dataloader.py",
         "DoWnGAN/gen_plots.py",
-        "DoWnGAN/losses.py",
+        "losses.py",
         "DoWnGAN/prep_gan.py",
         "DoWnGAN/process_data.py",
         "DoWnGAN/training.py",
