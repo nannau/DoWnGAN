@@ -29,7 +29,7 @@ setup(
     scripts=[
         "DoWnGAN/dataloader.py",
         "DoWnGAN/gen_plots.py",
-        "losses.py",
+        "DoWnGAN/losses.py",
         "DoWnGAN/prep_gan.py",
         "DoWnGAN/process_data.py",
         "DoWnGAN/training.py",
@@ -41,7 +41,7 @@ setup(
     install_requires=["numpy", "torch", "xarray", "sklearn"],
     tests_require=["pytest"],
     cmdclass={"test": PyTest},
-    package_dir={"DoWnGAN": "DoWnGAN"},
+    # package_dir={"DoWnGAN": "DoWnGAN"},
     package_data={"DoWnGAN": ["DoWnGAN/data/*", "DoWnGAN/"]},
     classifiers="""
         Intended Audience :: Science/Research
