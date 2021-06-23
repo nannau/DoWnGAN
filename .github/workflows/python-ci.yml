@@ -21,13 +21,8 @@ jobs:
         pip install -r requirements.txt -r test_requirements.txt
         pip install .
     - name: Test with pytest (full)
-      if: github.ref == 'refs/heads/master'
       run: |
-        py.test -v --cov
-    - name: Test with pytest (fast)
-      if: github.ref != 'refs/heads/master'
-      run: |
-        py.test -m "not slow" -v
+        pytest
     - name: Flake8 Check
       run: |
         flake8 DoWnGAN/
