@@ -41,8 +41,8 @@ setup(
     install_requires=["numpy", "torch", "xarray", "sklearn"],
     tests_require=["pytest"],
     cmdclass={"test": PyTest},
-    # package_dir={"DoWnGAN": "DoWnGAN"},
-    package_data={"DoWnGAN": ["DoWnGAN/data/*", "DoWnGAN/"]},
+    package_dir={"DoWnGAN": "DoWnGAN"},
+    package_data={"DoWnGAN": ["DoWnGAN/tests/", "DoWnGAN/data/*", "DoWnGAN/"]},
     classifiers="""
         Intended Audience :: Science/Research
         License :: GNU General Public License v3 (GPLv3)
