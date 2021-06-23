@@ -22,7 +22,7 @@ jobs:
         pip install .
     - name: Test with pytest (full)
       run: |
-        pytest
+        pytest DoWnGAN/tests/*.py
     - name: Flake8 Check
       run: |
         flake8 DoWnGAN/
