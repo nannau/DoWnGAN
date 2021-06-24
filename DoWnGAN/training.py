@@ -1,32 +1,31 @@
 from utils import mlflow_dict_logger
-from losses import MedianPool2d, eof_loss, vorticity_loss, divergence_loss, content_loss, low_pass_eof_batch
-import time
+from losses import (
+    eof_loss,
+    vorticity_loss,
+    divergence_loss,
+    content_loss,
+    low_pass_eof_batch,
+)
 import logging
-import subprocess
 import tracemalloc
 
-import numpy as np
 from csv import DictWriter
 import csv
 
-from torch.nn.functional import avg_pool2d
-from torchvision.utils import make_grid
 from torch.autograd import Variable
 from torch.autograd import grad as torch_grad
-from torch.utils.tensorboard import SummaryWriter
 
 import torch
-import torch.nn as nn
 from gen_plots import generate_plots
-from mlflow import log_metric, log_param, log_artifacts
+from mlflow import log_metric
+
 from mlflow.tracking import MlflowClient
 import mlflow
 
 import gc
 
-from memory_profiler import profile
 
-class Trainer():
+class Trainer:
     """Implementation of custom Wasserstein GAN with Gradient Penalty.
     See below for expected keys
     Args:
@@ -36,7 +35,15 @@ class Trainer():
         run_params, dict: Containing technical parameters and logging of run
 
     """
-    def __init__(self, models: dict, hyper_params: dict, run_params: dict, experiment, tag):
+
+    def __init__(
+        self,
+        models: dict,
+        hyper_params: dict,
+        run_params: dict,
+        experiment,
+        tag,
+    ):
         self.experiment = experiment
         self.tag = tag
         self.client = MlflowClient()
@@ -70,14 +77,16 @@ class Trainer():
         assert next(self.G.parameters()).is_cuda
         assert next(self.C.parameters()).is_cuda
 
-
     def _metric_log_every_n(self, name_of_metric, metric_to_log):
-        if self.num_steps % self.save_every == 0 and self.num_steps > self.critic_iterations:
+        if (
+            self.num_steps % self.save_every == 0
+            and self.num_steps > self.critic_iterations
+        ):
             log_metric(name_of_metric, metric_to_log)
             self._metric_print(name_of_metric, metric_to_log)
 
     def _metric_print(self, name_of_metric, metric_to_log):
-        logging.basicConfig(format='%(asctime)s %(message)s')
+        logging.basicConfig(format="%(asctime)s %(message)s")
         logging.info(f"{name_of_metric}: {metric_to_log}")
 
     def _critic_train_iteration(self, cr, hr, pca_og_shape, Z):
@@ -85,7 +94,9 @@ class Trainer():
 
         # Get generated data
         generated_data = self.G(cr)
-        gen_low = self.low(Z.to(self.device), pca_og_shape.to(self.device), generated_data)
+        gen_low = self.low(
+            Z.to(self.device), pca_og_shape.to(self.device), generated_data
+        )
         high_pass = generated_data - gen_low
         high_pass_truth = hr - self.low(Z, pca_og_shape, hr)
 
@@ -117,7 +128,20 @@ class Trainer():
         self.C_opt.step()
 
         # Cleanup
-        to_del = [d_loss, gradient_penalty, d_generated, d_real, data, d_generated_mean, d_real_mean, w_estimate, generated_data, high_pass_truth, high_pass, gen_low]
+        to_del = [
+            d_loss,
+            gradient_penalty,
+            d_generated,
+            d_real,
+            data,
+            d_generated_mean,
+            d_real_mean,
+            w_estimate,
+            generated_data,
+            high_pass_truth,
+            high_pass,
+            gen_low,
+        ]
         for var in to_del:
             del var
 
@@ -127,17 +151,18 @@ class Trainer():
 
         truth_low = self.low(Z.to(self.device), pca_og_shape.to(self.device), hr)
 
-
         # Get generated data
         generated_data = self.G(cr)
 
-        gen_low = self.low(Z.to(self.device), pca_og_shape.to(self.device), generated_data)
+        gen_low = self.low(
+            Z.to(self.device), pca_og_shape.to(self.device), generated_data
+        )
         high_pass = generated_data - gen_low
 
         X = pcas[0, ...]
         eofloss = eof_loss(X, hr[:, :2, ...], generated_data[:, :2, ...], self.device)
         self.metrics["EOF Coefficient L2"] = eofloss
-        
+
         divloss = divergence_loss(hr, generated_data, self.device)
         self.metrics["Divergence L2"] = divloss
 
@@ -156,17 +181,21 @@ class Trainer():
         # d_generated = self.C(generated_data)
         # High freq only
         d_generated = self.C(high_pass)
-        g_loss = - d_generated.mean()
+        g_loss = -d_generated.mean()
 
         # g_loss = (
-        #     self.eof_weight*eofloss + 
-        #     self.vort_weight*vortloss + 
-        #     self.div_weight*divloss + 
-        #     self.content_weight*cont_loss + 
+        #     self.eof_weight*eofloss +
+        #     self.vort_weight*vortloss +
+        #     self.div_weight*divloss +
+        #     self.content_weight*cont_loss +
         #     self.gamma*g_loss
         # )
 
-        g_loss = self.eof_weight*eofloss + self.content_weight*cont_loss + self.gamma*g_loss
+        g_loss = (
+            self.eof_weight * eofloss
+            + self.content_weight * cont_loss
+            + self.gamma * g_loss
+        )
 
         g_loss.backward()
         self.G_opt.step()
@@ -174,7 +203,19 @@ class Trainer():
         # Record loss
         self.metrics["Generator loss"] = g_loss.item()
 
-        to_del = [g_loss, cont_loss, eofloss, vortloss, divloss, d_generated, generated_data, X, gen_low, truth_low, high_pass]
+        to_del = [
+            g_loss,
+            cont_loss,
+            eofloss,
+            vortloss,
+            divloss,
+            d_generated,
+            generated_data,
+            X,
+            gen_low,
+            truth_low,
+            high_pass,
+        ]
         for var in to_del:
             del var
 
@@ -190,12 +231,16 @@ class Trainer():
         interpolated = Variable(interpolated, requires_grad=True)
 
         # Calculate probability of interpolated examples
-        prob_interpolated = self.C(interpolated)#.to(self.device)
+        prob_interpolated = self.C(interpolated)  # .to(self.device)
 
         # Calculate gradients of probabilities with respect to examples
-        gradients = torch_grad(outputs=prob_interpolated, inputs=interpolated,
-                               grad_outputs=torch.ones(prob_interpolated.size()).to(self.device),
-                               create_graph=True, retain_graph=True)[0]
+        gradients = torch_grad(
+            outputs=prob_interpolated,
+            inputs=interpolated,
+            grad_outputs=torch.ones(prob_interpolated.size()).to(self.device),
+            create_graph=True,
+            retain_graph=True,
+        )[0]
 
         # Gradients have shape (batch_size, num_channels, img_width, img_height),
         # so flatten to easily take norm per example in batch
@@ -215,7 +260,6 @@ class Trainer():
 
         # Return gradient penalty
         return self.gp_weight * ((gradients_norm - 1) ** 2).mean()
-
 
     def _train_epoch(self, data_loader, fixed, epoch):
         for i, data in enumerate(data_loader):
@@ -274,7 +318,7 @@ class Trainer():
 
                 # Log model
                 mlflow.pytorch.log_model(self.C, "Critic")
-                mlflow.pytorch.log_state_dict(self.C.state_dict(), "Critic")                
+                mlflow.pytorch.log_state_dict(self.C.state_dict(), "Critic")
                 mlflow.pytorch.log_model(self.G, "Generator")
                 mlflow.pytorch.log_state_dict(self.G.state_dict(), "Generator")
                 del fixed_writer
@@ -296,23 +340,25 @@ class Trainer():
 
         fixed_writer = {"coarse": fixed_coarse, "fine": fixed_real}
 
-        experiment_id = self.client.get_experiment_by_name(self.experiment).experiment_id
-        
+        experiment_id = self.client.get_experiment_by_name(
+            self.experiment
+        ).experiment_id
 
         with mlflow.start_run(experiment_id=experiment_id) as run:
             mlflow.set_tag(run.info.run_id, self.tag)
             mlflow_dict_logger(self.hyper_params)
 
-
             for epoch in range(self.epochs):
-                logging.basicConfig(format='%(asctime)s %(message)s')
-                logging.info(f'\nEpoch {epoch}')
+                logging.basicConfig(format="%(asctime)s %(message)s")
+                logging.info(f"\nEpoch {epoch}")
 
                 tracemalloc.start()
                 self._train_epoch(data_loader, fixed_writer, epoch)
                 current, peak = tracemalloc.get_traced_memory()
-                self.metrics["System Free Memory Peak MB"] = peak/10**6
-                logging.info(f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+                self.metrics["System Free Memory Peak MB"] = peak / 10 ** 6
+                logging.info(
+                    f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB"
+                )
 
                 tracemalloc.stop()
                 gc.collect()

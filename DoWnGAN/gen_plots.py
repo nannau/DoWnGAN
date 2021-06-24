@@ -1,9 +1,8 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from torch.utils.tensorboard import SummaryWriter
-import torch
 import mlflow
+
 
 def colorize(value, vmin=None, vmax=None, cmap=None):
     """
@@ -20,23 +19,23 @@ def colorize(value, vmin=None, vmax=None, cmap=None):
         (Default: value maximum)
       - cmap: a valid cmap named for use with matplotlib's `get_cmap`.
         (Default: Matplotlib default colormap)
-    
+
     Returns a 4D uint8 tensor of shape [height, width, 4].
     """
 
     # normalize
     vmin = value.min() if vmin is None else vmin
     vmax = value.max() if vmax is None else vmax
-    if vmin!=vmax:
-        value = (value - vmin) / (vmax - vmin) # vmin..vmax
+    if vmin != vmax:
+        value = (value - vmin) / (vmax - vmin)  # vmin..vmax
     else:
         # Avoid 0-division
-        value = value*0.
+        value = value * 0.0
     # squeeze last dim if it exists
     value = value.squeeze()
 
     cmapper = matplotlib.cm.get_cmap(cmap)
-    value = cmapper(value) # (nxmx4)
+    value = cmapper(value)  # (nxmx4)
 
     return value
 
@@ -57,12 +56,15 @@ def plot_to_tensorboard(fig, step):
     fig.canvas.draw()
 
     # Convert the figure to numpy array, read the pixel values and reshape the array
-    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
     img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
 
-    # Normalize into 0-1 range for TensorBoard(X). Swap axes for newer versions where API expects colors in first dim
+    # Normalize into 0-1 range for TensorBoard(X).
+    # Swap axes for newer versions where API expects colors in first dim
     img = img / 255.0
-    img = np.swapaxes(np.swapaxes(img, 0, 2), 1, 2) # if your TensorFlow + TensorBoard version are >= 1.8
+    img = np.swapaxes(
+        np.swapaxes(img, 0, 2), 1, 2
+    )  # if your TensorFlow + TensorBoard version are >= 1.8
 
     # Add figure in numpy "image" to TensorBoard writer
     # writer.add_image('Results', img, step)
@@ -81,11 +83,11 @@ def generate_plots(fixed):
     real = fixed["real"]
     coarse = fixed["coarse"]
 
-#     plt.style.use(['science','no-latex'])
-#     plt.rcParams.update({"figure.figsize":  (5,10),
-#                         'font.family': 'Times New Roman',
-#                         'font.size': 25,
-#                         'lines.linewidth': 2.5})
+    #     plt.style.use(['science','no-latex'])
+    #     plt.rcParams.update({"figure.figsize":  (5,10),
+    #                         'font.family': 'Times New Roman',
+    #                         'font.size': 25,
+    #                         'lines.linewidth': 2.5})
 
     fig, ax = plt.subplots(1, 3, figsize=(15, 15), subplot_kw=dict(box_aspect=1))
 
@@ -97,16 +99,6 @@ def generate_plots(fixed):
 
     cax3 = ax[2].imshow(coarse[0, 0, ...], cmap="viridis", origin="lower")
     ax[2].set_title("Coarse")
-
-    # ax[1, 1].plot(losses_running["iters"], losses_running["pca"], label='pca')
-    # ax[1, 1].plot(losses_running["iters"], losses_running["G"], label='G')
-    # ax[1, 1].plot(losses_running["iters"], losses_running["D"], label='D')
-    # ax[1, 1].plot(losses_running["iters"], losses_running["Content"], label='content')
-    # ax[1, 1].plot(losses_running["iters"], losses_running["D"].cpu(), label='Wasserstein Estimate')
-    # ax[1, 1].set_title("Losses")
-    # ax[1, 1].set_xlabel("Iteration")
-    # ax[1, 1].set_title("Loss")
-    # ax[1, 1].legend()
 
     plt.colorbar(cax, ax=ax[0], fraction=0.022)
     plt.colorbar(cax2, ax=ax[1], fraction=0.022)

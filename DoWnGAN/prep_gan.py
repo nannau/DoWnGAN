@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def find_nearest_index(data, val):
     """Bisect search algorithm to find a value within a monotonically
     increasing array
@@ -36,5 +37,5 @@ def find_nearest_index(data, val):
 
 
 def to_utc(d):
-    ts = (d - np.datetime64('1970-01-01T00:00:00')) / np.timedelta64(1, 's')
+    ts = (d - np.datetime64("1970-01-01T00:00:00")) / np.timedelta64(1, "s")
     return ts
