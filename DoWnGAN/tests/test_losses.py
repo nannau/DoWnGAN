@@ -45,7 +45,7 @@ def example_data():
 
 @pytest.fixture
 def actual_data():
-    dataroot = resource_filename("DoWnGAN", "data/interim_2000-10-01_to_2013-09-30.nc")
+    dataroot = resource_filename("DoWnGAN", "tests/coarse_test.nc")
     real = xr.open_dataset(dataroot)
     X = real["u10"][:100, ...]
     X = np.array(xr_standardize_field(X))
