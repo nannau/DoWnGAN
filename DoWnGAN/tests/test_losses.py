@@ -154,4 +154,5 @@ def test_eof_loss(actual_data):
     assert not np.isclose(
         mean_squared_error(magnitude[:, :, 0], magnitude_c[:, :, 0]), 0.0, atol=1e-6
     )
+    # Tests that non-corrupted signal is zero
     assert np.isclose(mean_squared_error(magnitude[:, :, 0], magnitude[:, :, 0]), 0.0)
