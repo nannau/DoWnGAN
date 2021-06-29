@@ -22,9 +22,7 @@ class Generator(nn.Module):
         )
 
         # Residual blocks.
-        residual_blocks = []
-        for _ in range(48):
-            residual_blocks.append(ResidualBlock(self.coarse_dim))
+        residual_blocks = [ResidualBlock(self.coarse_dim) for _ in range(48)]
         self.Trunk = nn.Sequential(*residual_blocks)
 
         # Second conv layer post residual blocks.
@@ -34,9 +32,7 @@ class Generator(nn.Module):
         )
 
         # 2 Upsampling layers.
-        upsampling = []
-        for _ in range(2):
-            upsampling.append(UpsampleBlock(self.coarse_dim*4))
+        upsampling = [UpsampleBlock(self.coarse_dim*4) for _ in range(2)]
         self.upsampling = nn.Sequential(*upsampling)
 
         # Final output layer.
