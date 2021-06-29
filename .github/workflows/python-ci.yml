@@ -22,4 +22,4 @@ jobs:
         pip install -e .
     - name: Test with pytest (full)
       run: |
-        py.test -v
+        py.test -v DoWnGAN/tests/
