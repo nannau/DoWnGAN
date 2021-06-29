@@ -6,6 +6,16 @@ This repo implements a Wasserstein Generative Adversarial Network with Gradient 
 # Requirements
 Although not absolutely required to run this source code, a working instance of CUDA and Pytorch is required for this repo. 
 
+Install requirements
+```bash
+pip install -r requirements
+```
+
+Install DoWnGAN
+```bash
+pip install -e /path/to/cloned/DoWnGAN/
+```
+
 Check if CUDA is installed and PyTorch has access to cuda GPU
 ```python3
 torch.cuda.is_available()
