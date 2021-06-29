@@ -81,8 +81,7 @@ class Trainer():
         projected_fake = projected_real.size(-1)*projected_fake/try_weighting
 
         coefficient_loss = nn.L1Loss().to(self.device)
-        closs = coefficient_loss(projected_fake, projected_real).item()
-        return closs
+        return coefficient_loss(projected_fake, projected_real).item()
 
 
     def _generator_train_iteration(self, cr, hr, pcas):
@@ -128,9 +127,7 @@ class Trainer():
 
         criterion_pixelwise = nn.L1Loss().to(self.device)
 
-        content_loss = criterion_pixelwise(cr, gen_lr)
-
-        return content_loss
+        return criterion_pixelwise(cr, gen_lr)
 
 
     def _gradient_penalty(self, real_data, generated_data):
@@ -186,8 +183,7 @@ class Trainer():
 
                 if self.num_steps > self.critic_iterations:
 
-                    fixed_writer = {}
-                    fixed_writer["fake"] = self.G(fixed["coarse"]).detach().cpu()
+                    fixed_writer = {"fake": self.G(fixed["coarse"]).detach().cpu()}
                     fixed_writer["real"] = fixed["fine"].detach().cpu()
                     fixed_writer["coarse"] = fixed["coarse"].detach().cpu()
 
