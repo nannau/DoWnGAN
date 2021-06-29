@@ -42,7 +42,7 @@ setup(
     tests_require=["pytest"],
     cmdclass={"test": PyTest},
     package_dir={"DoWnGAN": "DoWnGAN"},
-    package_data={"DoWnGAN": ["tests/*", "data/*", "DoWnGAN/"]},
+    package_data={"DoWnGAN": ["tests/*", "data/*", "DoWnGAN/", "DoWnGAN/tests/"]},
     classifiers="""
         Intended Audience :: Science/Research
         License :: GNU General Public License v3 (GPLv3)
