@@ -79,9 +79,9 @@ def generate_plots(fixed):
 
     # writer.add_scalars('Losses', loss_dict, loss_dict["iters"])
 
-    fake = fixed["fake"]
-    real = fixed["real"]
-    coarse = fixed["coarse"]
+    # fake = fixed["fake"]
+    # fixed["real"] = fixed["real"]
+    # coarse = fixed["coarse"]
 
     #     plt.style.use(['science','no-latex'])
     #     plt.rcParams.update({"figure.figsize":  (5,10),
@@ -89,24 +89,45 @@ def generate_plots(fixed):
     #                         'font.size': 25,
     #                         'lines.linewidth': 2.5})
 
-    fig, ax = plt.subplots(1, 3, figsize=(15, 15), subplot_kw=dict(box_aspect=1))
+    fig, ax = plt.subplots(3, 5, figsize=(15, 15), subplot_kw=dict(box_aspect=1))
 
-    cax = ax[0].imshow(fake[0, 0, ...], cmap="viridis", origin="lower")
-    ax[0].set_title("Generated")
+    cax = ax[0, 0].imshow(fixed["fake"][0, 0, ...], cmap="viridis", origin="lower")
+    ax[0, 0].set_title("Generated")
+    cax2 = ax[0, 1].imshow(fixed["real"][0, 0, ...], cmap="viridis", origin="lower")
+    ax[0, 1].set_title("Ground Truth")
+    cax3 = ax[0, 2].imshow(fixed["coarse"][0, 0, ...], cmap="viridis", origin="lower")
+    ax[0, 2].set_title("Coarse")
+    cax4 = ax[0, 3].imshow(fixed["low_real"][0, 0, ...], cmap="viridis", origin="lower")
+    ax[0, 3].set_title("Low Pass Real")
+    cax4 = ax[0, 4].imshow(fixed["low_fake"][0, 0, ...], cmap="viridis", origin="lower")
+    ax[0, 4].set_title("Low Pass Fake")
+    plt.colorbar(cax, ax=ax[0, 0], fraction=0.022)
 
-    cax2 = ax[1].imshow(real[0, 0, ...], cmap="viridis", origin="lower")
-    ax[1].set_title("Ground Truth")
+    cax = ax[1, 0].imshow(fixed["fake"][1, 0, ...], cmap="viridis", origin="lower")
+    ax[1, 0].set_title("Generated")
+    cax2 = ax[1, 1].imshow(fixed["real"][1, 0, ...], cmap="viridis", origin="lower")
+    ax[1, 1].set_title("Ground Truth")
+    cax3 = ax[1, 2].imshow(fixed["coarse"][1, 0, ...], cmap="viridis", origin="lower")
+    ax[1, 2].set_title("Coarse")
+    cax4 = ax[1, 3].imshow(fixed["low_real"][1, 0, ...], cmap="viridis", origin="lower")
+    ax[1, 3].set_title("Low Pass Real")
+    cax4 = ax[1, 4].imshow(fixed["low_fake"][1, 0, ...], cmap="viridis", origin="lower")
+    ax[1, 4].set_title("Low Pass Fake")
+    plt.colorbar(cax, ax=ax[1, 0], fraction=0.022)
 
-    cax3 = ax[2].imshow(coarse[0, 0, ...], cmap="viridis", origin="lower")
-    ax[2].set_title("Coarse")
-
-    plt.colorbar(cax, ax=ax[0], fraction=0.022)
-    plt.colorbar(cax2, ax=ax[1], fraction=0.022)
-    plt.colorbar(cax3, ax=ax[2], fraction=0.022)
+    cax = ax[2, 0].imshow(fixed["fake"][2, 0, ...], cmap="viridis", origin="lower")
+    ax[2, 0].set_title("Generated")
+    cax2 = ax[2, 1].imshow(fixed["real"][2, 0, ...], cmap="viridis", origin="lower")
+    ax[2, 1].set_title("Ground Truth")
+    cax3 = ax[2, 2].imshow(fixed["coarse"][2, 0, ...], cmap="viridis", origin="lower")
+    ax[2, 2].set_title("Coarse")
+    cax4 = ax[2, 3].imshow(fixed["low_real"][2, 0, ...], cmap="viridis", origin="lower")
+    ax[2, 3].set_title("Low Pass Real")
+    cax4 = ax[2, 4].imshow(fixed["low_fake"][2, 0, ...], cmap="viridis", origin="lower")
+    ax[2, 4].set_title("Low Pass Fake")
+    plt.colorbar(cax, ax=ax[2, 0], fraction=0.022)
 
     plt.tight_layout()
     plt.savefig("artifacts/train_snap.png")
     plt.close(fig)
     mlflow.log_artifact("artifacts/train_snap.png")
-
-    # plot_to_tensorboard(writer, fig, loss_dict["iters"])

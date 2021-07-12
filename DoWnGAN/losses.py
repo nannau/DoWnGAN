@@ -145,11 +145,20 @@ def vorticity_loss(hr, fake, device):
     return vort_loss(vort_real, vort_fake).item()
 
 
-def low_pass_eof_batch(Z, pcas, fine):
+def low_pass_eof_batch(Z, pcas, fine, transformer, device, fake=False):
+    transformer_u, transformer_v = transformer
+    if fake:
+        Zu = transformer_u.transform(torch.reshape(fine[:, 0, ...].detach().cpu(), (fine.size(0), fine.size(2)*fine.size(3))))
+        Zv = transformer_v.transform(torch.reshape(fine[:, 1, ...].detach().cpu(), (fine.size(0), fine.size(2)*fine.size(3))))
+        Z = torch.stack([torch.from_numpy(Zu), torch.from_numpy(Zv)], dim=1)
+
+        del Zu
+        del Zv
+
     batch_low_u = torch.stack(
         [
             torch.reshape(
-                torch.matmul(pcas[i, :, 0, ...].T, Z[i, 0, ...]),
+                torch.matmul(pcas[:, 0, ...].T.float().to(device), Z[i, 0, ...].float().to(device)),
                 (fine.size(2), fine.size(3)),
             )
             for i in range(Z.size(0))
@@ -159,13 +168,14 @@ def low_pass_eof_batch(Z, pcas, fine):
     batch_low_v = torch.stack(
         [
             torch.reshape(
-                torch.matmul(pcas[i, :, 1, ...].T, Z[i, 1, ...]),
+                torch.matmul(pcas[:, 1, ...].T.float().to(device), Z[i, 1, ...].float().to(device)),
                 (fine.size(2), fine.size(3)),
             )
             for i in range(Z.size(0))
         ],
         dim=0,
     )
-    lows = torch.stack([batch_low_u, batch_low_v], dim=1)
+    lows = torch.stack([batch_low_u, batch_low_v], dim=1).to(device)
 
     return lows
+

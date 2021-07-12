@@ -10,8 +10,6 @@ class NetCDFSR(Dataset):
         self,
         fine: xr.DataArray,
         coarse: xr.DataArray,
-        pcas: xr.DataArray,
-        pca_og_shape: xr.DataArray,
         Z: xr.DataArray,
         device: torch.device,
     ) -> torch.Tensor:
@@ -24,8 +22,6 @@ class NetCDFSR(Dataset):
         """
         self.fine = fine
         self.coarse = coarse
-        self.pcas = pcas
-        self.pca_og_shape = pca_og_shape
         self.Z = Z
 
     def __len__(self):
@@ -36,14 +32,12 @@ class NetCDFSR(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        arr = self.fine[idx, ...]
-        carr = self.coarse[idx, ...]
-        pca_og_shape = self.pca_og_shape
-        Z = self.Z[idx, ...]
+        fine_ = self.fine[idx, ...]
+        coarse_ = self.coarse[idx, ...]
 
-        pcas_arr = torch.unsqueeze(self.pcas, 0)
+        Z_ = self.Z[idx, ...]
 
-        return arr, carr, pcas_arr, pca_og_shape, Z
+        return fine_, coarse_, Z_
 
 
 def xr_standardize_field(field: xr.DataArray) -> xr.DataArray:

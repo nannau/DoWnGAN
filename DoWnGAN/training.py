@@ -1,5 +1,5 @@
-from utils import mlflow_dict_logger
-from losses import (
+from DoWnGAN.utils import mlflow_dict_logger
+from DoWnGAN.losses import (
     eof_loss,
     vorticity_loss,
     divergence_loss,
@@ -16,7 +16,7 @@ from torch.autograd import Variable
 from torch.autograd import grad as torch_grad
 
 import torch
-from gen_plots import generate_plots
+from DoWnGAN.gen_plots import generate_plots
 from mlflow import log_metric
 
 from mlflow.tracking import MlflowClient
@@ -89,16 +89,16 @@ class Trainer:
         logging.basicConfig(format="%(asctime)s %(message)s")
         logging.info(f"{name_of_metric}: {metric_to_log}")
 
-    def _critic_train_iteration(self, cr, hr, pca_og_shape, Z):
+    def _critic_train_iteration(self, cr, hr, EOFs, Z, transformer):
         """ """
 
         # Get generated data
         generated_data = self.G(cr)
         gen_low = self.low(
-            Z.to(self.device), pca_og_shape.to(self.device), generated_data
+            Z.to(self.device), EOFs.to(self.device), generated_data, transformer, self.device, fake=True
         )
         high_pass = generated_data - gen_low
-        high_pass_truth = hr - self.low(Z, pca_og_shape, hr)
+        high_pass_truth = hr - self.low(Z, EOFs, hr, transformer, self.device)
 
         # Calculate probabilities on real and generated data
         # data = Variable(hr, requires_grad=True)
@@ -110,7 +110,7 @@ class Trainer:
 
         # Get gradient penalty
         # gradient_penalty = self._gradient_penalty(data, generated_data)
-        gradient_penalty = self._gradient_penalty(data, high_pass)
+        gradient_penalty = self._gradient_penalty(data.to(self.device), high_pass.to(self.device))
         self.metrics["Gradient Penalty"] = gradient_penalty.item()
 
         # Create total loss and optimize
@@ -145,22 +145,21 @@ class Trainer:
         for var in to_del:
             del var
 
-    def _generator_train_iteration(self, cr, hr, pcas, pca_og_shape, Z):
+    def _generator_train_iteration(self, cr, hr, EOFs, Z, transformer):
         """ """
         self.G_opt.zero_grad()
 
-        truth_low = self.low(Z.to(self.device), pca_og_shape.to(self.device), hr)
+        truth_low = self.low(Z.to(self.device), EOFs.to(self.device), hr, transformer, self.device)
 
         # Get generated data
         generated_data = self.G(cr)
 
         gen_low = self.low(
-            Z.to(self.device), pca_og_shape.to(self.device), generated_data
+            Z.to(self.device), EOFs.to(self.device), generated_data, transformer, self.device, fake=True
         )
         high_pass = generated_data - gen_low
 
-        X = pcas[0, ...]
-        eofloss = eof_loss(X, hr[:, :2, ...], generated_data[:, :2, ...], self.device)
+        eofloss = eof_loss(EOFs, hr[:, :2, ...], generated_data[:, :2, ...], self.device)
         self.metrics["EOF Coefficient L2"] = eofloss
 
         divloss = divergence_loss(hr, generated_data, self.device)
@@ -211,7 +210,7 @@ class Trainer:
             divloss,
             d_generated,
             generated_data,
-            X,
+            EOFs,
             gen_low,
             truth_low,
             high_pass,
@@ -220,11 +219,11 @@ class Trainer:
             del var
 
     def _gradient_penalty(self, real_data, generated_data):
-        # batch_size = self.batch_size
-        batch_size = real_data.size()[0]
+
+        current_batch_size = real_data.size(0)
 
         # Calculate interpolation
-        alpha = torch.rand(batch_size, 1, 1, 1).to(self.device)
+        alpha = torch.rand(current_batch_size, 1, 1, 1, device=self.device)
         alpha = alpha.expand_as(real_data)
 
         interpolated = alpha * real_data.data + (1 - alpha) * generated_data.data
@@ -237,14 +236,14 @@ class Trainer:
         gradients = torch_grad(
             outputs=prob_interpolated,
             inputs=interpolated,
-            grad_outputs=torch.ones(prob_interpolated.size()).to(self.device),
+            grad_outputs=torch.ones(prob_interpolated.size(), device=self.device),
             create_graph=True,
             retain_graph=True,
         )[0]
 
         # Gradients have shape (batch_size, num_channels, img_width, img_height),
         # so flatten to easily take norm per example in batch
-        gradients = gradients.view(batch_size, -1).to(self.device)
+        gradients = gradients.view(self.batch_size, -1).to(self.device)
         # gnorm = gradients.norm(2, dim=1).mean().detach().cpu()
         # self.losses['gradient_norm'].append(gradients.norm(2, dim=1).mean().detach().cpu())
         # metric_log_every_n("Gradient Norm L2", gnorm)
@@ -261,34 +260,28 @@ class Trainer:
         # Return gradient penalty
         return self.gp_weight * ((gradients_norm - 1) ** 2).mean()
 
-    def _train_epoch(self, data_loader, fixed, epoch):
+    def _train_epoch(self, data_loader, fixed, EOFs, epoch, transformer):
         for i, data in enumerate(data_loader):
 
-            hr = data[0].clone().detach().requires_grad_(True).to(self.device)
+            hr = data[0].clone().detach().requires_grad_(True).to(self.device).float()
             # hr = torch.cat((hr, torch.randn(hr.size(0), 1, hr.size(2), hr.size(3)).to(self.device)), dim=1) # Add for stochasticity
             # low_hr = data[1].clone().detach().requires_grad_(True).to(self.device)
             # high_hr = data[2].clone().detach().requires_grad_(True).to(self.device)
 
-            cr = data[1].clone().detach().requires_grad_(True).to(self.device)
+            cr = data[1].clone().detach().requires_grad_(True).to(self.device).float()
             # cr = torch.cat((cr, torch.randn(cr.size(0), 1, cr.size(2), cr.size(3)).to(self.device)), dim=1) # Add for stochasticity
-            pcas = data[2].clone().detach().requires_grad_(True).to(self.device)
-
-            pca_og_shape = data[3].clone().detach().requires_grad_(True).to(self.device)
-
-            Z = data[4].clone().detach().requires_grad_(True).to(self.device)
+            EOFs = EOFs.to(self.device).float()
+            Z = data[2].clone().detach().requires_grad_(True).to(self.device).float()
 
             self.num_steps += 1
-            self._critic_train_iteration(cr, hr, pca_og_shape, Z)
+            self._critic_train_iteration(cr, hr, EOFs, Z, transformer)
 
-            # result = subprocess.check_output(['bash','-c', 'free -m'])
-            # free_memory = float(result.split()[9])
-            # self.metrics["System Free Memory"] = free_memory
             self.metrics["Iteration number"] = self.num_steps
             self.metrics["GPU Memory"] = torch.cuda.memory_allocated()
 
             # Only update generator every |critic_iterations| iterations
             if self.num_steps % self.critic_iterations == 0:
-                self._generator_train_iteration(cr, hr, pcas, pca_og_shape, Z)
+                self._generator_train_iteration(cr, hr, EOFs, Z, transformer)
 
             if self.num_steps == 7:
                 with open("metrics.csv", "w") as f:
@@ -301,9 +294,9 @@ class Trainer:
                 fixed_writer["fake"] = self.G(fixed["coarse"]).detach().cpu()
                 fixed_writer["real"] = fixed["fine"].detach().cpu()
                 fixed_writer["coarse"] = fixed["coarse"].detach().cpu()
-                # fixed_writer["fake"] = self.G(cr).detach().cpu()
-                # fixed_writer["real"] = hr.detach().cpu()
-                # fixed_writer["coarse"] = cr.detach().cpu()
+                fixed_writer["low_real"] = self.low(fixed["Z"][:3, ...], EOFs, fixed["fine"][:3, ...], transformer, self.device).detach().cpu()
+                fixed_writer["low_fake"] = self.low(fixed["Z"][:3, ...], EOFs, self.G(fixed["coarse"][:3, ...]), transformer, self.device, fake=True).detach().cpu()
+
                 generate_plots(fixed_writer)
 
                 for key in self.metrics.keys():
@@ -323,22 +316,24 @@ class Trainer:
                 mlflow.pytorch.log_state_dict(self.G.state_dict(), "Generator")
                 del fixed_writer
 
-            to_del = [hr, cr, pcas]
+            to_del = [hr, cr, EOFs]
             for var in to_del:
                 del var
 
-    def train(self, data_loader, epochs, fixed):
+    def train(self, data_loader, epochs, fixed, EOFs, transformer):
         logging.basicConfig(level=logging.INFO)
 
         # Fix sample to see how image generation improves during training
         fixed_coarse = Variable(fixed["coarse"], requires_grad=False)
         fixed_real = Variable(fixed["fine"], requires_grad=False)
+        fixed_Zs = fixed["Z"].to(self.device)
 
         if self.use_cuda:
             fixed_coarse = fixed_coarse.to(self.device)
             fixed_real = fixed_real.to(self.device)
+            fixed_Zs = fixed_Zs.to(self.device)
 
-        fixed_writer = {"coarse": fixed_coarse, "fine": fixed_real}
+        fixed_writer = {"coarse": fixed_coarse, "fine": fixed_real, "Z": fixed_Zs}
 
         experiment_id = self.client.get_experiment_by_name(
             self.experiment
@@ -353,7 +348,7 @@ class Trainer:
                 logging.info(f"\nEpoch {epoch}")
 
                 tracemalloc.start()
-                self._train_epoch(data_loader, fixed_writer, epoch)
+                self._train_epoch(data_loader, fixed_writer, EOFs, epoch, transformer)
                 current, peak = tracemalloc.get_traced_memory()
                 self.metrics["System Free Memory Peak MB"] = peak / 10 ** 6
                 logging.info(
@@ -361,4 +356,3 @@ class Trainer:
                 )
 
                 tracemalloc.stop()
-                gc.collect()
