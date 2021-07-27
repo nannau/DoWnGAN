@@ -3,6 +3,8 @@ This repo is under development as thesis work and is by not complete or tested.
 
 This repo implements a Wasserstein Generative Adversarial Network with Gradient Penalty (WGAN-GP) to perform single image super resolution (SISR) to downscale climate fields.
 
+SISR is applied to ERA-Interim coarse input wind fields (but can be generalized to other fields) to acheive the same resolution as WRF U10 and V10 wind components. 
+
 # Requirements
 Although not absolutely required to run this source code, a working instance of CUDA and Pytorch is required for this repo. 
 
