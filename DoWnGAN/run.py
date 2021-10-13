@@ -1,28 +1,20 @@
 import gc
-
-from dataloader import NetCDFSR, xr_standardize_field
-from models.generator import Generator
-from models.critic import Critic
-from mlflow.tracking import MlflowClient
-import mlflow
-
 import pickle
 import glob
 
+from mlflow.tracking import MlflowClient
+import mlflow
 import xarray as xr
 import numpy as np
 import pandas as pd
 import torch
 import dask
 from pkg_resources import resource_filename
-
 from dask.distributed import Client
 from sklearn.metrics import mean_squared_error
-
 from scipy.interpolate import NearestNDInterpolator
 
 import matplotlib.pyplot as plt
-from training import Trainer
 from DoWnGAN.prep_gan import (
     load_data,
     mask_and_standardize,
@@ -32,7 +24,11 @@ from DoWnGAN.prep_gan import (
     to_utc,
     filter_times
 )
-
+from DoWnGAN.training import Trainer
+from DoWnGAN.dataloader import NetCDFSR, xr_standardize_field
+from DoWnGAN.utils import define_experiment, write_tags
+from DoWnGAN.models.generator import Generator
+from DoWnGAN.models.critic import Critic
 
 torch.cuda.empty_cache()
 dask.config.set({"array.slicing.split_large_chunks": True})
@@ -47,40 +43,24 @@ def define_hyperparameters(pretrained_hash = None):
         "critic_iterations": 5,
         "batch_size": 64,
         "gamma": 0.01,
-        "eof_weight": 0.5,
-        "div_weight": (1 - 0.01) / 4,
-        "vort_weight": (1 - 0.01) / 4,
-        "content_weight": 0.5,
+        "content_weight": 5,
         "ncomp": 75,
         "lr": 0.00025,
     }
 
     run_params = {
-        "epochs": 500,
+        "epochs": 1000,
         "print_every": 250,
         "save_every": 250,
         "use_cuda": True,
         "device": device,
-        "log_path": "mlruns",
-        "load_eofs": False
+        "log_path": resource_filename("DoWnGAN", "mlflow_experiments"),
     }
 
-    if pretrained_hash is not None:
-        logged_model_gen = f'file:///home/nannau/msc/DoWnGAN/mlruns/1/{pretrained_hash}/artifacts/Generator'
-        logged_model_critic = f'file:///home/nannau/msc/DoWnGAN/mlruns/1/{pretrained_hash}/artifacts/Critic'
+    mlclient = MlflowClient(tracking_uri=run_params["log_path"])
 
-        # Load model as a PyFuncModel.
-        generator = mlflow.pytorch.load_model(logged_model_gen).to(device)
-        state_dict = mlflow.pytorch.load_state_dict(logged_model_gen)
-        generator.load_state_dict(state_dict)
-
-        critic = mlflow.pytorch.load_model(logged_model_critic).to(device)
-        state_dict = mlflow.pytorch.load_state_dict(logged_model_critic)
-        critic.load_state_dict(state_dict)
-
-    else:
-        critic = Critic(16, 128, 2).to(device)
-        generator = Generator(16, 128, 2).to(device)
+    critic = Critic(16, 128, 2).to(device)
+    generator = Generator(16, 128, 7).to(device)
 
     G_optimizer = torch.optim.Adam(
         generator.parameters(),
@@ -106,8 +86,8 @@ def define_hyperparameters(pretrained_hash = None):
         models=models,
         hyper_params=hyper_params,
         run_params=run_params,
-        experiment="WGAN-GP Extended Loss Equal Weights",
-        tags={"description": "equal weights on loss"},
+        experiment=define_experiment(mlclient),
+        tags=write_tags(),
         sf = 8
     )
 
@@ -115,11 +95,10 @@ def define_hyperparameters(pretrained_hash = None):
 
 
 def run_it():
-    # torch.multiprocessing.freeze_support()
-
-    # pars = define_hyperparameters(pretrained_hash="c8d5915d951547ee9c60da90a98ee1cc")
+    """Commense training. Loads and processes the training data, partitions
+    into train and validation sets 
+    """
     pars = define_hyperparameters()
-
     fine_paths = {
         "U": "data/wrf/U10_regrid_16/regrid_16_6hrly_wrf2d_d01_ctrl_U10*.nc",
         "V": "data/wrf/V10_regrid_16/regrid_16_6hrly_wrf2d_d01_ctrl_V10*.nc"
@@ -130,7 +109,6 @@ def run_it():
     }
 
     data = load_data(fine_paths, coarse_paths)
-
     coarse_u10 = data["coarse"].u10.loc["2000-01-01":"2015-05-30"]#.chunk({"time": 250})
     coarse_v10 = data["coarse"].v10.loc["2000-01-01":"2015-05-30"]#.chunk({"time": 250})
 
@@ -138,7 +116,10 @@ def run_it():
     times = dt_index(data["fine_u"].Times)
 
     # Apply filter to times for months you'd like
-    time_mask = filter_times(times, mask_months=False, test_fraction=0.1)
+    time_mask = filter_times(times, mask_years=[2000, 2006, 2010])
+
+    anti_time_mask = ~time_mask
+    anti_time_mask[0] = False
 
     fine, coarse = mask_and_standardize(
         time_mask,
@@ -149,87 +130,60 @@ def run_it():
         pars["sf"]
     )
 
+    fine_c, coarse_c = mask_and_standardize(
+        anti_time_mask,
+        data["fine_u"],
+        data["fine_v"],
+        coarse_u10,
+        coarse_v10,
+        pars["sf"]
+    )
+
+    randomized_validation = np.random.choice(fine_c.shape[0], 100)
+    fine_c = fine_c[randomized_validation, ...]
+    coarse_c = coarse_c[randomized_validation, ...]
+
+
     print("Masked and Standardized")
-
-    # Stochasticity
-    # Random fine
-    # rand_fine = xr.DataArray(np.random.uniform(-1, 1, u10.shape), coords=u10.coords)
-    #Random coarse
-    # rand_coarse = xr.DataArray(np.random.uniform(-1, 1, coarse_u10_patch.shape), coords=coarse_u10_patch.coords)
-
-    # coarse = xr.concat([coarse_u10_patch, coarse_v10_patch], dim="var").transpose('time', 'var', 'latitude', 'longitude')
-    # fine = xr.concat([u10, v10], dim="var").transpose('Times', 'var', 'lat', 'lon')
 
     # Free up some memory
     for var in [coarse_u10, coarse_v10, times, time_mask]:
         del var
 
-    # Compute PCA
-
-
-    # if not pars["run_params"]["load_eofs"]:
-    # Weighted by explained variance
-    EOFu, Zu, transformer_u = get_eofs_and_project(pars["hyper_params"]["ncomp"], fine[:, 0, ...])
-    U = EOFu, Zu, transformer_u
-    EOFv, Zv, transformer_v = get_eofs_and_project(pars["hyper_params"]["ncomp"], fine[:, 1, ...])
-    V = EOFv, Zv, transformer_v
-    print("Both EOFs fit")
-    # with open(resource_filename("DoWnGAN", "data/eofs.pickle"), "wb") as f:
-    #     pickle.dump((U, V), f)
-    # print("Pickled!")
-    # else:
-    #     with open(resource_filename("DoWnGAN", "data/eofs.pickle"), "rb") as f:
-    #         U, V = pickle.load(f)
-    #         EOFu, Zu, transformer_u = U
-    #         EOFv, Zv, transformer_v = V
-
-    transformer = (transformer_u, transformer_v)
-
-    EOFs = torch.from_numpy(np.stack([EOFu, EOFv], axis=1))
-    for var in [EOFu, EOFv]:
-        del var
-    print("Stack EOFs")
-
-    Z = torch.from_numpy(np.stack([Zu, Zv], axis=1)).float()
-    print("Stack Z")
-    for var in [Zu, Zv]:
-        del var
-
-
-    # u10_low = np.array([np.matmul(pca.components_.T, Zu[i, ...]).reshape(u10.shape[1], u10.shape[2]) for i in range(Zu.shape[0])])
-    # v10_low = np.array([np.matmul(pca.components_.T, Zv[i, ...]).reshape(v10.shape[1], v10.shape[2]) for i in range(Zv.shape[0])])
-    # low_uv10 = np.stack([u10_low, v10_low])
-
-
-    # fine_t_low = torch.from_numpy(np.array(low_uv10))
-    # del low_uv10
-    # fine_t_high = fine_t - fine_t_low
-
     fine_t = torch.from_numpy(np.array(fine)).float()
     del fine
+
+    fine_t_c = torch.from_numpy(np.array(fine_c)).float()
+    del fine_c
     print("Stack fine")
 
     coarse_t = torch.from_numpy(np.array(coarse)).float()
     del coarse
+
+
+    coarse_t_c = torch.from_numpy(np.array(coarse_c)).float()
+    del coarse_c
     print("Stack coarse")
 
-    dataset = NetCDFSR(fine_t, coarse_t, Z, device=device)
+    dataset = NetCDFSR(fine_t, coarse_t, device=device)
     dataloader = torch.utils.data.DataLoader(
         dataset=dataset, batch_size=pars["hyper_params"]["batch_size"], shuffle=True
     )
 
-    real_batch, real_cbatch, Zs = next(iter(dataloader))
+    real_batch, real_cbatch = next(iter(dataloader))
     fixed = {
         "coarse": real_cbatch[:3, ...],
         "fine": real_batch[:3, ...],
-        "Z": Zs[:3, ...]
     }
 
-    for var in [fine_t, coarse_t, Z]:
+    validate = {
+        "coarse": coarse_t_c,
+        "fine": fine_t_c
+    }
+
+    for var in [fine_t, coarse_t]:
         del var
 
-    client = MlflowClient()
-    print(client.get_experiment_by_name(pars["experiment"]).experiment_id)
     trainer = Trainer(
         pars["models"],
         pars["hyper_params"],
@@ -242,9 +196,8 @@ def run_it():
     trainer.train(
         dataloader, 
         epochs=pars["epochs"],
-        EOFs=EOFs,
         fixed=fixed,
-        transformer = transformer
+        validate=validate,
     )
 
     torch.cuda.empty_cache()

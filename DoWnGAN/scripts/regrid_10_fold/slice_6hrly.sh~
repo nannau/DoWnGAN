@@ -1,0 +1,4 @@
+for FILE in /tsanta/shared/wrf_era/HRCONUS/ctrl/U10/wrf2d_d01_ctrl_U10_200*.nc
+do
+    cdo selhour,00,06,12,18 $FILE 6hrly_$(basename -- $FILE)
+done

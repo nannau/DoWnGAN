@@ -72,7 +72,7 @@ def plot_to_tensorboard(fig, step):
     plt.close(fig)
 
 
-def generate_plots(fixed):
+def generate_plots(fixed, path):
     # state = torch.load(loss_path)
     # losses_running = state["losses_running"]
     # loss_dict = state["losses_instance"]
@@ -128,6 +128,6 @@ def generate_plots(fixed):
     plt.colorbar(cax, ax=ax[2, 0], fraction=0.022)
 
     plt.tight_layout()
-    plt.savefig("artifacts/train_snap.png")
+    plt.savefig("train_snap.png")
     plt.close(fig)
-    mlflow.log_artifact("artifacts/train_snap.png")
+    mlflow.log_artifact("train_snap.png")

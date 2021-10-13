@@ -49,7 +49,7 @@ class Generator(nn.Module):
 
         # Final output layer.
         self.conv3 = nn.Conv2d(
-            self.coarse_dim, self.nc, kernel_size=9, stride=1, padding=4
+            self.coarse_dim, self.nc-5, kernel_size=9, stride=1, padding=4
         )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:

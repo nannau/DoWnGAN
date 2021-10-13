@@ -1,0 +1,6 @@
+for FILE in /tsanta/shared/wrf_era/HRCONUS/ctrl/U10/wrf2d_d01_ctrl_U10_2000*.nc
+do
+    if [["$FILE" != *"200010"*]]; then
+        cdo selhour,144,0,6 $FILE $(basename -- $FILE)
+    fi
+done
