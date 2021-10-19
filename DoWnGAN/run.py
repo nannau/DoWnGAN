@@ -16,6 +16,7 @@ from sklearn.metrics import mean_squared_error
 from scipy.interpolate import NearestNDInterpolator
 
 import matplotlib.pyplot as plt
+from xarray.core import variable
 from DoWnGAN.prep_gan import (
     load_data,
     mask_and_standardize,
@@ -96,49 +97,70 @@ def define_hyperparameters(pretrained_hash = None):
     return d 
 
 
+def get_coarse_tensor(region, set):
+
+    coarse_path = os.environ.get("DATA_PATH")+f"/{set}_gt/{region}/era_{region}_netcdf_{set}_years.nc"
+    coarse = xr.open_dataset(coarse_path).to_array().transpose("time", "variable", "lat", "lon").rename({"lat":"latitude", "lon":"longitude"})
+
+    coarse_mask = xr.open_dataset(os.environ.get("DATA_PATH")+f"/covariates/{set}/{region}_land_sea_mask.nc").to_array().transpose("time", "variable", "latitude", "longitude")
+    coarse_sf = xr.open_dataset(os.environ.get("DATA_PATH")+f"/covariates/{set}/{region}_surface_friction.nc").to_array().transpose("time", "variable", "latitude", "longitude")
+    coarse_geo = xr.open_dataset(os.environ.get("DATA_PATH")+f"/covariates/{set}/{region}_geopotential_height.nc").to_array().transpose("time", "variable", "latitude", "longitude")
+    coarse_sp = xr.open_dataset(os.environ.get("DATA_PATH")+f"/covariates/{set}/{region}_surface_pressure.nc").to_array().transpose("time", "variable", "latitude", "longitude")
+    coarse_cape = xr.open_dataset(os.environ.get("DATA_PATH")+f"/covariates/{set}/{region}_cape.nc").to_array().transpose("time", "variable", "latitude", "longitude")
+
+
+    fields = [
+        coarse[:, 0,...].values,
+        coarse[:, 1,...].values,
+        coarse_mask.transpose("time", "variable", "latitude", "longitude")[:, 0, ...].values,
+        coarse_sp[:, 0, ...].values,
+        coarse_sf[:, 0, ...].values,
+        coarse_geo[:, 0, ...].values,
+        coarse_cape[:, 0, ...].values
+    ]
+
+    for i, cov in enumerate(fields):
+        fields[i] = torch.from_numpy(cov)
+        print(cov.shape, fields[0].shape)
+        assert cov.shape == fields[0].shape
+
+    coarse_t = torch.stack(fields, dim=1)
+    return coarse_t
+
 def run_it():
     """Commense training. Loads and processes the training data, partitions
     into train and validation sets 
     """
+    region = "florida"
+
     pars = define_hyperparameters()
 
-    fine = xr.open_dataset(os.environ.get('DATA_PATH')+f"/train_gt/{region}/wrf_{florida}_netcdf_train_years.nc")
-    fine_v = xr.open_dataset(os.environ.get('DATA_PATH')+f"/validation_gt/{region}/wrf_{florida}_netcdf_validation_years.nc")
-    
-    fine_c, coarse_c = mask_and_standardize(
-        anti_time_mask,
-        data["fine_u"],
-        data["fine_v"],
-        coarse_u10,
-        coarse_v10,
-        pars["sf"]
-    )
+    coarse_t = get_coarse_tensor(region, "train")
+    coarse_t_v = get_coarse_tensor(region, "validation")
 
-    randomized_validation = np.random.choice(fine_c.shape[0], 100)
-    fine_c = fine_c[randomized_validation, ...]
-    coarse_c = coarse_c[randomized_validation, ...]
+    fine_path = os.environ.get('DATA_PATH')+f"/train_gt/{region}/wrf_{region}_netcdf_train_years.nc"
+    fine = xr.open_dataset(fine_path).to_array().transpose("time", "variable", "lat", "lon")
+
+    # Validation data
+
+    fine_path_v = os.environ.get("DATA_PATH")+f"/validation_gt/{region}/wrf_{region}_netcdf_validation_years.nc"
+    fine_v = xr.open_dataset(fine_path_v).to_array().transpose("time", "variable", "lat", "lon")
+
+    randomized_validation = np.random.choice(fine_v.time.shape[0], 100)
+
+    fine_v = fine_v[randomized_validation, ...]
+    coarse_t_v = coarse_t_v[randomized_validation, ...]
 
 
     print("Masked and Standardized")
 
-    # Free up some memory
-    for var in [coarse_u10, coarse_v10, times, time_mask]:
-        del var
 
     fine_t = torch.from_numpy(np.array(fine)).float()
     del fine
 
-    fine_t_c = torch.from_numpy(np.array(fine_c)).float()
-    del fine_c
+    fine_t_v = torch.from_numpy(np.array(fine_v)).float()
+    del fine_v
     print("Stack fine")
-
-    coarse_t = torch.from_numpy(np.array(coarse)).float()
-    del coarse
-
-
-    coarse_t_c = torch.from_numpy(np.array(coarse_c)).float()
-    del coarse_c
-    print("Stack coarse")
 
     dataset = NetCDFSR(fine_t, coarse_t, device=device)
     dataloader = torch.utils.data.DataLoader(
@@ -152,8 +174,8 @@ def run_it():
     }
 
     validate = {
-        "coarse": coarse_t_c,
-        "fine": fine_t_c
+        "coarse": coarse_t_v,
+        "fine": fine_t_v
     }
 
     for var in [fine_t, coarse_t]:

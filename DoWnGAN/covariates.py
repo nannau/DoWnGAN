@@ -63,6 +63,7 @@ def main(region, set, log_level, sf=8):
 
     if set == "validation":
         time_mask = ~time_mask
+    time_mask[0] = False
 
     coarse_sf = os.environ.get("DATA_PATH")+"/covariates/interim_roughness_2000-10-01_to_2013-09-30.nc"
     coarse_sf = xr.open_dataset(coarse_sf)
