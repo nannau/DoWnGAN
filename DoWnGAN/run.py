@@ -1,6 +1,7 @@
 import gc
 import pickle
 import glob
+import os
 
 from mlflow.tracking import MlflowClient
 import mlflow
@@ -18,12 +19,12 @@ import matplotlib.pyplot as plt
 from DoWnGAN.prep_gan import (
     load_data,
     mask_and_standardize,
-    get_eofs_and_project,
     dt_index,
     find_nearest_index,
     to_utc,
     filter_times
 )
+
 from DoWnGAN.training import Trainer
 from DoWnGAN.dataloader import NetCDFSR, xr_standardize_field
 from DoWnGAN.utils import define_experiment, write_tags
@@ -55,6 +56,7 @@ def define_hyperparameters(pretrained_hash = None):
         "use_cuda": True,
         "device": device,
         "log_path": resource_filename("DoWnGAN", "mlflow_experiments"),
+        "data_path": os.environ.get('DATA_PATH')
     }
 
     mlclient = MlflowClient(tracking_uri=run_params["log_path"])
@@ -99,37 +101,10 @@ def run_it():
     into train and validation sets 
     """
     pars = define_hyperparameters()
-    fine_paths = {
-        "U": "data/wrf/U10_regrid_16/regrid_16_6hrly_wrf2d_d01_ctrl_U10*.nc",
-        "V": "data/wrf/V10_regrid_16/regrid_16_6hrly_wrf2d_d01_ctrl_V10*.nc"
-    }
 
-    coarse_paths = {
-        "UV": "./data/interim_2000-10-01_to_2013-09-30.nc"
-    }
-
-    data = load_data(fine_paths, coarse_paths)
-    coarse_u10 = data["coarse"].u10.loc["2000-01-01":"2015-05-30"]#.chunk({"time": 250})
-    coarse_v10 = data["coarse"].v10.loc["2000-01-01":"2015-05-30"]#.chunk({"time": 250})
-
-    # Extract times in datetime format
-    times = dt_index(data["fine_u"].Times)
-
-    # Apply filter to times for months you'd like
-    time_mask = filter_times(times, mask_years=[2000, 2006, 2010])
-
-    anti_time_mask = ~time_mask
-    anti_time_mask[0] = False
-
-    fine, coarse = mask_and_standardize(
-        time_mask,
-        data["fine_u"],
-        data["fine_v"],
-        coarse_u10,
-        coarse_v10,
-        pars["sf"]
-    )
-
+    fine = xr.open_dataset(os.environ.get('DATA_PATH')+f"/train_gt/{region}/wrf_{florida}_netcdf_train_years.nc")
+    fine_v = xr.open_dataset(os.environ.get('DATA_PATH')+f"/validation_gt/{region}/wrf_{florida}_netcdf_validation_years.nc")
+    
     fine_c, coarse_c = mask_and_standardize(
         anti_time_mask,
         data["fine_u"],
