@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.utils import _pair, _quadruple
-from torchgeometry.losses import ssim
 import pytorch_msssim
 
 
