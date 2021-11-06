@@ -36,13 +36,17 @@ class NetCDFSR(Dataset):
         return fine_, coarse_
 
 
-def xr_standardize_field(field: xr.DataArray) -> xr.DataArray:
+def xr_standardize_field(field: xr.DataArray, mean=None, std=None) -> xr.DataArray:
     """Standardize/regularize field assuming
     single 'colour' channel
     field (xarray.DataArray)
     """
-    mean = field.mean(skipna=True)
-    std = field.std(skipna=True)
+    if mean is None or std is None:
+        mean = field.mean(skipna=True)
+        std = field.std(skipna=True)
 
-    field = (field - mean) / std
+        field = (field - mean) / std
+    else:
+        field = (field - mean) / std
+
     return field
