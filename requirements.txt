@@ -4,3 +4,4 @@ torch
 xarray
 netcdf4
 mlflow
+git+git://github.com/jorge-pessoa/pytorch-msssim@master#egg=pytorch-msssim
