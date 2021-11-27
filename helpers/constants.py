@@ -2,6 +2,9 @@ import os
 from wrf_times import datetime_wrf_period
 from datetime import datetime
 
+if os.getenv('FINE_DATA_PATH_U10') is None:
+    raise ValueError('Are env variables set? Use set_envs.sh for template')
+
 # Consants
 fine_paths_dict = {
     "u10": os.environ.get('FINE_DATA_PATH_U10'),
@@ -63,11 +66,16 @@ mask_years = [2000, 2006, 2010]
 # Scale factor for the covariates
 scale_factor = 8
 
-cpu_count = os.cpu_count()
-
 # WRF Time slice
 # Add extra  6 hour step early due to peculiarities in WRF (extra field)
 # Actual starting time of WRF is 2000-10-01 00:00:00
 start_time = datetime(2000, 9, 30, 18, 0)
 end_time = datetime(2013, 9, 30, 18, 0)
 range_datetimes = datetime_wrf_period(start_time, end_time)
+
+# Compute constants
+cpu_count = os.cpu_count()
+chunk_size = 150
+
+# I/O
+proc_path = os.getenv('PROC_DATA')

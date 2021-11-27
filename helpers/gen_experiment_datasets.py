@@ -117,7 +117,7 @@ def load_covariates(path_dict: dict, ref_dataset: xr.Dataset) -> dict:
     for key in path_dict.keys():
         print("Adding ", key)
         print("--"*80)
-        ds = xr.open_dataset(path_dict[key])
+        ds = xr.open_dataset(path_dict[key], engine="netcdf4")
         ds = standardize_attribute_names(ds)
 
         # Additional preprocessing steps - assure that the data is sorted
@@ -156,7 +156,12 @@ def concat_data_arrays(data_dict: dict, variable_order: list) -> xr.DataArray:
 
     concat_list_vars = [x.expand_dims(dim="variable", axis=1) for x in concat_list]
     print("Order in processed dataset: ", variable_order.keys())
-    return xr.concat(concat_list_vars, dim="variable")
+    ds = xr.Dataset()
+    for var, x in zip(variable_order, concat_list):
+        ds[var] = x
+
+    return ds 
+    # xr.concat(concat_list_vars, dim="variable").to_dataset(dim="variable", name=variable_order.keys())
 
 def train_test_split(coarse: xr.Dataset, fine: xr.Dataset) -> xr.Dataset:
     """Splits the data into train and test sets.
@@ -171,11 +176,16 @@ def train_test_split(coarse: xr.Dataset, fine: xr.Dataset) -> xr.Dataset:
     if 2000 in c.mask_years:
         test_time_mask[0] = False
 
-    coarse_train = coarse.loc[train_time_mask]
-    fine_train = fine.loc[train_time_mask]
+    coarse_train = coarse.loc[{"time": train_time_mask}]
+    fine_train = fine.loc[{"time": train_time_mask}]
 
-    coarse_test = coarse.loc[test_time_mask]
-    fine_test = fine.loc[test_time_mask]
+    coarse_test = coarse.loc[{"time": test_time_mask}]
+    fine_test = fine.loc[{"time": test_time_mask}]
+
+    assert coarse_train.time.shape[0] == fine_train.time.shape[0], "Train time dim on coarse and fine datasets do not match!"
+    assert coarse_train.time.shape[0] == fine_train.time.shape[0], "Train time dim on coarse and fine datasets do not match!"
+    assert coarse_test.time.shape[0] == fine_test.time.shape[0], "Test time dim on coarse and fine datasets do not match!"
+    assert coarse_train.time.shape[0] == fine_train.time.shape[0], "Test time dim on coarse and fine datasets do not match!"
 
     return coarse_train, fine_train, coarse_test, fine_test
 
@@ -234,13 +244,28 @@ def load_original_netcdfs():
     # Chooese reference dataset to define lat and lon
     coarse = concat_data_arrays(coarse_xr_dict, c.covariate_names_ordered)
 
-    print("Coarse shape", coarse.shape)
+    # Check sizes of tensors!
+    # assert len(coarse.shape) == 4, "Coarse data has wrong shape!"
+    # assert len(fine.shape) == 4, "Fine data has wrong shape!"
 
     # Train test split!
     coarse_train, fine_train, coarse_test, fine_test = train_test_split(coarse, fine)
 
-    print("Final train set size: ", coarse_train.shape, "(coarse)", fine_train.shape, "(fine)")
-    print("Final test set size: ", coarse_test.shape, "(coarse)", fine_test.shape, "(fine)")
+
+    print("Final train set size:")
+    print("Coarse")
+    print("-"*80)
+    print(coarse_train.head())
+    print("Fine")
+    print("-"*80)
+    print(fine_train.head())
+    print("Final test set size:")
+    print("Coarse")
+    print("-"*80)
+    print(coarse_test.head())
+    print("Fine")
+    print("-"*80)
+    print(fine_test.head())
 
     return coarse_train, fine_train, coarse_test, fine_test
 
