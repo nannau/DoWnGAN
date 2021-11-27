@@ -15,6 +15,7 @@ import constants as c
 
 dask.config.set({"array.slicing.split_large_chunks": True})
 
+
 def crop_dataset(ds: xr.Dataset, scale_factor: int) -> xr.Dataset:
     """
     Crops the dataset to the region of interest.
@@ -178,14 +179,58 @@ def train_test_split(coarse: xr.Dataset, fine: xr.Dataset) -> xr.Dataset:
 
     return coarse_train, fine_train, coarse_test, fine_test
 
+
+def xr_standardize_array(da: xr.DataArray) -> xr.DataArray:
+    """Standardizes the data array to have mean of 0
+    and standard deviation 1.
+    """
+    mean = da.mean(skipna=True)
+    std = da.std(skipna=True)
+    return (da - mean) / std
+
+def xr_standardize_all(data_dict: dict) -> dict:
+    """
+    Standardizes the data arrays in the dictionary.
+    """
+    for key in data_dict.keys():
+        # Binary land mask does not need normalization
+        if key != "land_sea_mask":
+            std = float(data_dict[key].std())
+            mean = float(data_dict[key].mean())
+            print("-"*80)
+            print(f"Before Mean of {key}", mean)
+            print(f"Before Standard Deviation of {key}", std)
+
+            data_dict[key] = xr_standardize_array(data_dict[key])
+            std = float(data_dict[key].std())
+            mean = float(data_dict[key].mean())
+            print("-"*80)
+            print(f"Mean of {key}", mean)
+            print(f"Standard Deviation of {key}", std)
+            # Surface pressure has such large units that the correction
+            # is within a few orders of magnitude.
+            if key != "surface_pressure":
+                assert np.isclose(mean, 0., atol=1e-2), "Mean of the data is not 0!"
+                assert np.isclose(std, 1., atol=1e-1), "Standard deviation of the data is not 1!"
+
+            if key == "surface_pressure":
+                assert np.isclose(mean, 0., atol=1e-2), "Mean of the data is not 0!"
+                assert np.isclose(std, 1., atol=1.0), "Standard deviation of the data is not within tolerance!"
+
+
+    return data_dict
+
+
 def load_original_netcdfs():
     coarse_path = c.coarse_path
     cov_paths_dict = c.cov_paths_dict
 
     fine_xr_dict = load_fine(c.fine_paths_dict)
+    fine_xr_dict = xr_standardize_all(fine_xr_dict)
     fine = concat_data_arrays(fine_xr_dict, c.fine_names_ordered)
 
     coarse_xr_dict = load_covariates(cov_paths_dict, fine)
+    coarse_xr_dict = xr_standardize_all(coarse_xr_dict)
     # Chooese reference dataset to define lat and lon
     coarse = concat_data_arrays(coarse_xr_dict, c.covariate_names_ordered)
 
@@ -197,9 +242,11 @@ def load_original_netcdfs():
     print("Final train set size: ", coarse_train.shape, "(coarse)", fine_train.shape, "(fine)")
     print("Final test set size: ", coarse_test.shape, "(coarse)", fine_test.shape, "(fine)")
 
+    return coarse_train, fine_train, coarse_test, fine_test
+
 
 if __name__ == "__main__":
     # set up cluster and workers
-    with LocalCluster(n_workers=12, threads_per_worker=6, memory_limit='8GB') as cluster:
+    with LocalCluster(n_workers=12, threads_per_worker=1, memory_limit='14GB') as cluster:
         client = Client(cluster)
         load_original_netcdfs()
