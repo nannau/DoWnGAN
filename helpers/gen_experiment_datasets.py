@@ -231,7 +231,7 @@ def xr_standardize_all(data_dict: dict) -> dict:
     return data_dict
 
 
-def load_original_netcdfs():
+def generate_train_test_coarse_fine():
     coarse_path = c.coarse_path
     cov_paths_dict = c.cov_paths_dict
 

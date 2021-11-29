@@ -5,6 +5,12 @@ from torch.nn.modules.utils import _pair, _quadruple
 import pytorch_msssim
 
 
+def wass_loss(C, real, fake):
+    real = C(real)
+    fake = C(fake)
+    return torch.mean(real) - torch.mean(fake)
+
+
 def SSIM_Loss(x, y, reduction="mean", window_size=11):
     """Return 1 - SSIM
     """

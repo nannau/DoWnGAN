@@ -4,20 +4,17 @@ import xarray as xr
 import numpy as np
 
 class NetCDFSR(Dataset):
-    """Data loader for netCDF data for GAN Super Resolution"""
-
+    """Data loader from torch.Tensors"""
     def __init__(
         self,
-        fine: xr.DataArray,
-        coarse: xr.DataArray,
+        fine: torch.Tensor,
+        coarse: torch.Tensor,
         device: torch.device,
     ) -> torch.Tensor:
         """
-        Args:
-            coarse (xarray.DataArray): Coarse resolution fields (time series)
-            fine (xarray.DataArray): Fine resolution xarray.DataArray
-            pcas (numpy.ndarray): Principal components
-            device (torch.device): cuda device
+        Initializes the dataset.
+        Returns:
+            torch.Tensor: The dataset batches.
         """
         self.fine = fine
         self.coarse = coarse
@@ -34,19 +31,3 @@ class NetCDFSR(Dataset):
         coarse_ = self.coarse[idx, ...]
 
         return fine_, coarse_
-
-
-def xr_standardize_field(field: xr.DataArray, mean=None, std=None) -> xr.DataArray:
-    """Standardize/regularize field assuming
-    single 'colour' channel
-    field (xarray.DataArray)
-    """
-    if mean is None or std is None:
-        mean = field.mean(skipna=True)
-        std = field.std(skipna=True)
-
-        field = (field - mean) / std
-    else:
-        field = (field - mean) / std
-
-    return field

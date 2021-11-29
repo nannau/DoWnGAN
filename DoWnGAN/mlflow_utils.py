@@ -1,9 +1,14 @@
 from mlflow import log_param
+import hyperparams as hp
 import logging
 
-def mlflow_dict_logger(d: dict):
-    for key in d.keys():
-        log_param(key, d[key])
+def log_hyperparams():
+    """Logs the hyperparameters"""
+    keys = [item for item in dir(hp) if not item.startswith("__")]
+    values = hp.__dict__.items()
+    for key in values:
+        mlflow.log_param(key, values[key])
+
 
 def metric_print(name_of_metric, metric_to_log):
     logging.basicConfig(format="%(asctime)s %(message)s")
