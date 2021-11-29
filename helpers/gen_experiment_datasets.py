@@ -5,13 +5,13 @@ from xarray.core.dataset import Dataset
 import xarray as xr
 import numpy as np
 import pandas as pd
-from wrf_times import filter_times, wrf_to_dt
+from helpers.wrf_times import filter_times, wrf_to_dt
 from dask.distributed import Client, LocalCluster
 import dask
 
 import matplotlib.pyplot as plt
 
-import constants as c
+import helpers.constants as c
 
 dask.config.set({"array.slicing.split_large_chunks": True})
 
@@ -269,6 +269,14 @@ def generate_train_test_coarse_fine():
 
     return coarse_train, fine_train, coarse_test, fine_test
 
+
+def load_preprocessed():
+    coarse_train = xr.open_dataset(c.proc_path+f"/coarse_train_{c.region}.nc", engine="netcdf4")
+    fine_train = xr.open_dataset(c.proc_path+f"/fine_train_{c.region}.nc", engine="netcdf4")
+    coarse_test = xr.open_dataset(c.proc_path+f"/coarse_test_{c.region}.nc", engine="netcdf4")
+    fine_test = xr.open_dataset(c.proc_path+f"/fine_test_{c.region}.nc", engine="netcdf4")
+
+    return coarse_train, fine_train, coarse_test, fine_test
 
 if __name__ == "__main__":
     # set up cluster and workers

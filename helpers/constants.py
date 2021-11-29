@@ -1,5 +1,5 @@
 import os
-from wrf_times import datetime_wrf_period
+from helpers.wrf_times import datetime_wrf_period
 from datetime import datetime
 
 if os.getenv('FINE_DATA_PATH_U10') is None:

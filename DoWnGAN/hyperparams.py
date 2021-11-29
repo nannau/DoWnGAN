@@ -1,5 +1,5 @@
 # Defines the hyperparameter and constants configurationsimport gc
-from DoWnGAN.DoWnGAN.losses import (
+from DoWnGAN.losses import (
     content_loss,
     content_MSELoss,
     SSIM_Loss,
@@ -13,7 +13,7 @@ device = torch.device("cuda:0")
 # Hyper params
 gp_lambda = 10
 critic_iterations = 5
-batch_size = 64
+batch_size = 2
 gamma = 0.01
 content_lambda = 5
 ncomp = 75
@@ -29,6 +29,9 @@ device = device
 # Frequency separation parameters
 freq_sep = False
 padding = 2 # Valid only if freq_sep is True
+
+# Whether to load preprocessed data
+already_preprocessed = True
 
 experiment_path = os.getenv("EXPERIMENT_PATH")
 

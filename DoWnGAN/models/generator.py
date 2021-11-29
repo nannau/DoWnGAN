@@ -9,13 +9,14 @@ import torch.nn as nn
 class Generator(nn.Module):
     r"""The main architecture of the generator."""
 
-    def __init__(self, coarse_dim, fine_dim, nc):
+    def __init__(self, coarse_dim, fine_dim, nc, n_predictands):
         r"""This is an esrgan model defined by the author himself."""
         super(Generator, self).__init__()
         # First layer.
         self.coarse_dim = coarse_dim
         self.fine_dim = fine_dim
         self.nc = nc
+        self.n_predictands = n_predictands
         self.conv1 = nn.Sequential(
             nn.Conv2d(self.nc, self.coarse_dim, kernel_size=9, stride=1, padding=4),
             nn.PReLU(),
@@ -49,7 +50,7 @@ class Generator(nn.Module):
 
         # Final output layer.
         self.conv3 = nn.Conv2d(
-            self.coarse_dim, self.nc-5, kernel_size=9, stride=1, padding=4
+            self.coarse_dim, self.n_predictands, kernel_size=9, stride=1, padding=4
         )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:

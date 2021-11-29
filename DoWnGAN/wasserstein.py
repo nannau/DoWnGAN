@@ -1,21 +1,21 @@
 # This defines the wasserstein architecture
-from DoWnGAN.DoWnGAN.gen_grid_plots import gen_grid_images
+from DoWnGAN.gen_grid_plots import gen_grid_images
 import torch
 import stage as s
 import hyperparams as hp
 from DoWnGAN.losses import content_loss
 from DoWnGAN.gen_grid_plots import gen_grid_images
-from mlflow_epoch import post_epoch_metric_mean, gen_batch_and_log_metrics, initialize_metric_dicts, log_metrics
+from mlflow_epoch import post_epoch_metric_mean, gen_batch_and_log_metrics, initialize_metric_dicts, log_network_models
 
 class WassersteinGAN:
     """Implements Wasserstein GAN with gradient penalty and 
     frequency separation"""
 
-    def __init__(self) -> None:
-        self.G = s.generator,
-        self.C = s.critic,
-        self.G_optimizer = s.G_optimizer,
-        self.C_optimizer = s.C_optimizer,
+    def __init__(self, G, C, G_optimizer, C_optimizer) -> None:
+        self.G = s.generator
+        self.C = s.critic
+        self.G_optimizer = s.G_optimizer
+        self.C_optimizer = s.C_optimizer
         self.num_steps = 0
         
     def _critic_train_iteration(self, coarse, fine):
@@ -64,7 +64,7 @@ class WassersteinGAN:
         g_loss = -torch.mean(c_fake)*hp.gamma
 
         # Add content loss and create objective function
-        g_loss += hp.content_lambda * content_loss(fake, fine)
+        g_loss += hp.content_lambda * content_loss(fake, fine, device=hp.device)
 
         g_loss.backward()
 
@@ -113,8 +113,10 @@ class WassersteinGAN:
             dataloader (torch.utils.data.DataLoader): The dataloader to use.
             epoch (int): The epoch number.
         """
+        print(f"Epoch {epoch}")
+        print(80*"=")
         train_metrics = initialize_metric_dicts({})
-        batch_metrics = s.batch_metrics
+        test_metrics = initialize_metric_dicts({})
 
         for batch_idx, (coarse, fine) in enumerate(dataloader):
             coarse = coarse.to(hp.device)
@@ -161,6 +163,9 @@ class WassersteinGAN:
         cbatch, rbatch = next(iter(testdataloader))
         gen_grid_images(self.G, cbatch, rbatch, f"test_{epoch}")
 
+        # Log the models to mlflow pytorch models
+        print(f"Artifact URI: {mlflow.get_artifact_uri()}")
+        log_network_models(self.C, self.G, epoch)
 
     def train(self, dataloader, testdataloader):
         """
@@ -169,5 +174,5 @@ class WassersteinGAN:
             dataloader (torch.utils.data.DataLoader): The dataloader to use.
         """
         self.num_steps = 0
-        for epoch in range(hp.num_epochs):
-            self._train_epoch(dataloader, epoch)
+        for epoch in range(hp.epochs):
+            self._train_epoch(dataloader, testdataloader, epoch)

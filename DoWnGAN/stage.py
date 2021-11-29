@@ -9,14 +9,18 @@ import hyperparams as hp
 from mlflow.tracking import MlflowClient
 import torch
 
-from helpers.gen_experiment_datasets import generate_train_test_coarse_fine
+from helpers.gen_experiment_datasets import generate_train_test_coarse_fine, load_preprocessed
 
 assert torch.cuda.is_available(), "CUDA not available"
 
 # Load dataset
-coarse_train, fine_train, coarse_test, fine_test = generate_train_test_coarse_fine()
+if not hp.already_preprocessed:
+    coarse_train, fine_train, coarse_test, fine_test = generate_train_test_coarse_fine()
+if hp.already_preprocessed:
+    coarse_train, fine_train, coarse_test, fine_test = load_preprocessed()
 
-# Covnert to tensors
+# Convert to tensors
+print("Loading region into memory...")
 coarse_train = torch.from_numpy(coarse_train.to_array().to_numpy()).transpose(0, 1).float()
 fine_train = torch.from_numpy(fine_train.to_array().to_numpy()).transpose(0, 1).float()
 coarse_test = torch.from_numpy(coarse_test.to_array().to_numpy()).transpose(0, 1).float()
@@ -28,8 +32,12 @@ n_predictands = fine_train.shape[1]
 coarse_dim_n = coarse_train.shape[-1]
 n_covariates = coarse_train.shape[1]
 
+print("Network dimensions: ")
+print("Fine: ", fine_dim_n, "x", n_predictands)
+print("Coarse: ", coarse_dim_n, "x", n_covariates)
+
 critic = Critic(coarse_dim_n, fine_dim_n, n_predictands).to(hp.device)
-generator = Generator(coarse_dim_n, fine_dim_n, n_predictands).to(hp.device)
+generator = Generator(coarse_dim_n, fine_dim_n, n_covariates, n_predictands).to(hp.device)
 
 # Define optimizers
 G_optimizer = torch.optim.Adam(generator.parameters(), hp.lr, betas=(0.9, 0.99))

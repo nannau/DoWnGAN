@@ -5,14 +5,10 @@ import logging
 def log_hyperparams():
     """Logs the hyperparameters"""
     keys = [item for item in dir(hp) if not item.startswith("__")]
-    values = hp.__dict__.items()
+    values = hp.__dict__
     for key in values:
-        mlflow.log_param(key, values[key])
+        log_param(key, values[key])
 
-
-def metric_print(name_of_metric, metric_to_log):
-    logging.basicConfig(format="%(asctime)s %(message)s")
-    logging.info(f"{name_of_metric}: {metric_to_log}")
 
 def define_experiment(mlclient):
     print("Enter the experiment name you wish to add the preceding training run to.")

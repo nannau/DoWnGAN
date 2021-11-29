@@ -27,13 +27,16 @@ setup(
     author_email="nannau@uvic.ca",
     zip_safe=True,
     scripts=[
+        "DoWnGAN/train.py",
+        "helpers/wrf_times.py",
+        "helpers/gen_experiment_datasets.py",
+        "DoWnGAN/gen_grid_plots.py",
         "DoWnGAN/dataloader.py",
         "DoWnGAN/gen_plots.py",
         "DoWnGAN/losses.py",
         "DoWnGAN/prep_gan.py",
         "DoWnGAN/process_data.py",
         "DoWnGAN/training.py",
-        "DoWnGAN/utils.py",
         "DoWnGAN/run.py",
         "DoWnGAN/models/critic.py",
         "DoWnGAN/models/generator.py"
@@ -42,7 +45,7 @@ setup(
     tests_require=["pytest"],
     cmdclass={"test": PyTest},
     package_dir={"DoWnGAN": "DoWnGAN"},
-    package_data={"DoWnGAN": ["tests/*", "data/*", "DoWnGAN/", "DoWnGAN/tests/"]},
+    package_data={"DoWnGAN": ["tests/*", "data/*", "DoWnGAN/", "helpers/", "DoWnGAN/tests/"]},
     classifiers="""
         Intended Audience :: Science/Research
         License :: GNU General Public License v3 (GPLv3)
