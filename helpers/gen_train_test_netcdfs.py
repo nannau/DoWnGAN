@@ -11,7 +11,7 @@ import multiprocessing
 
 def gen_netcdf():
     # Takes configuration from constants.py
-    coarse_train, fine_train, coarse_test, fine_test = ged.load_original_netcdfs()
+    coarse_train, fine_train, coarse_test, fine_test = ged.generate_train_test_coarse_fine()
 
     # Write to netcdf
     print("Writing to netcdf...")

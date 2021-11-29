@@ -38,12 +38,12 @@ invariant_fields = ["land_sea_mask", "geopotential", "geopotential2"]
 covariate_names_ordered = {
     # Standard name: variable name in netcdf
     "u10": 'u10',
-    "v10":"v10",
-    "land_sea_mask":"lsm",
-    "surface_pressure":"sp",
-    "surface_roughness":"sr",
-    "geopotential":"z",
-    "cape":"z"
+    "v10": "v10",
+    "land_sea_mask": "lsm",
+    "surface_pressure": "sp",
+    "surface_roughness": "sr",
+    "geopotential": "z",
+    "cape": "cape"
 }
 
 fine_names_ordered = {"u10": "u10", "v10": "v10"}

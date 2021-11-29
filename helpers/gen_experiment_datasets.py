@@ -79,7 +79,7 @@ def load_fine(path_dict: dict) -> dict:
             glob.glob(path_dict[key]), 
             combine = "by_coords",
             engine = "netcdf4",
-            concat_dim = "Time"
+            parallel = True
         )
         # Standardize the dimension names so that
         # They're all the same!
@@ -114,16 +114,17 @@ def load_covariates(path_dict: dict, ref_dataset: xr.Dataset) -> dict:
 
     datasets_dict = {}
     # Load covariates
-    for key in path_dict.keys():
+    for key in path_dict:
         print("Adding ", key)
         print("--"*80)
         ds = xr.open_dataset(path_dict[key], engine="netcdf4")
+        # if isinstance(ds, xr.DataArray):
         ds = standardize_attribute_names(ds)
 
         # Additional preprocessing steps - assure that the data is sorted
         # by latitude
         ds = ds.sortby("lat", ascending=True)
-        datasets_dict[key] = ds
+        datasets_dict[key] = ds[c.covariate_names_ordered[key]]
 
         # Extend the data along the time dimension if invariant
         if key == "mask":
@@ -135,7 +136,7 @@ def load_covariates(path_dict: dict, ref_dataset: xr.Dataset) -> dict:
             datasets_dict[key] = extend_along_time(datasets_dict[key])
 
     ref_coarse = datasets_dict[c.ref_coarse]
-    for key in datasets_dict.keys():
+    for key in datasets_dict:
         datasets_dict[key] = datasets_dict[key].assign_coords({"time": c.range_datetimes, "lat": ref_coarse.lat, "lon": ref_coarse.lon})
 
     return datasets_dict
@@ -145,23 +146,15 @@ def concat_data_arrays(data_dict: dict, variable_order: list) -> xr.DataArray:
     """
     Concatenates a list of data arrays along the time dimension.
     """
-    concat_list = []
-    for key in variable_order:
-        ds = data_dict[key]
-        if isinstance(ds, xr.Dataset):
-            for var in list(ds.data_vars):
-                concat_list.append(ds[var])
-        else:
-            concat_list.append(ds)
-
-    concat_list_vars = [x.expand_dims(dim="variable", axis=1) for x in concat_list]
     print("Order in processed dataset: ", variable_order.keys())
     ds = xr.Dataset()
-    for var, x in zip(variable_order, concat_list):
-        ds[var] = x
+    for var, key in zip(variable_order, data_dict):
+        ds[var] = data_dict[key]
 
-    return ds 
-    # xr.concat(concat_list_vars, dim="variable").to_dataset(dim="variable", name=variable_order.keys())
+    print(80*"-")
+
+    return ds
+
 
 def train_test_split(coarse: xr.Dataset, fine: xr.Dataset) -> xr.Dataset:
     """Splits the data into train and test sets.
@@ -202,7 +195,7 @@ def xr_standardize_all(data_dict: dict) -> dict:
     """
     Standardizes the data arrays in the dictionary.
     """
-    for key in data_dict.keys():
+    for key in data_dict:
         # Binary land mask does not need normalization
         if key != "land_sea_mask":
             std = float(data_dict[key].std())
@@ -244,10 +237,6 @@ def generate_train_test_coarse_fine():
     # Chooese reference dataset to define lat and lon
     coarse = concat_data_arrays(coarse_xr_dict, c.covariate_names_ordered)
 
-    # Check sizes of tensors!
-    # assert len(coarse.shape) == 4, "Coarse data has wrong shape!"
-    # assert len(fine.shape) == 4, "Fine data has wrong shape!"
-
     # Train test split!
     coarse_train, fine_train, coarse_test, fine_test = train_test_split(coarse, fine)
 
@@ -277,9 +266,3 @@ def load_preprocessed():
     fine_test = xr.open_dataset(c.proc_path+f"/fine_test_{c.region}.nc", engine="netcdf4")
 
     return coarse_train, fine_train, coarse_test, fine_test
-
-if __name__ == "__main__":
-    # set up cluster and workers
-    with LocalCluster(n_workers=12, threads_per_worker=1, memory_limit='14GB') as cluster:
-        client = Client(cluster)
-        load_original_netcdfs()
