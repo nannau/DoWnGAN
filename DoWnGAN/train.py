@@ -2,6 +2,7 @@ import stage as s
 import hyperparams as hp
 from DoWnGAN.wasserstein import WassersteinGAN
 import mlflow
+import torch
 from mlflow_utils import log_hyperparams
 import subprocess
 
@@ -34,3 +35,5 @@ with mlflow.start_run(experiment_id = s.exp_id, run_name = s.tag) as run:
         s.dataloader, 
         s.testdataloader,
     ) 
+
+torch.cuda.empty_cache()

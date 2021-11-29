@@ -15,7 +15,7 @@ mlflow.set_tracking_uri(hp.experiment_path)
 
 def log_to_file(dict, train_test):
     """Writes the metrics to a csv file"""
-    csv_path = f"{mlflow.get_artifact_uri}/{train_test}_metrics.csv"
+    csv_path = f"{mlflow.get_artifact_uri()}/{train_test}_metrics.csv"
     # This will write to a new csv file if there isn't one
     # but append to an existing one if there is one
     with open(csv_path, "a", newline="") as f:
@@ -40,7 +40,7 @@ def post_epoch_metric_mean(d, train_test):
     for key in hp.metrics_to_calculate.keys():
         means[key] = torch.mean(
             torch.FloatTensor(d[key])
-        )
+        ).item()
         log_metric(key, means[key])
         metric_print(key, means[key])
     
@@ -54,9 +54,9 @@ def gen_batch_and_log_metrics(G, C, coarse, real, d):
 
     for key in hp.metrics_to_calculate.keys():
         if key == "Wass":
-            d[key].append(hp.metrics_to_calculate[key](creal, cfake, hp.device))
+            d[key].append(hp.metrics_to_calculate[key](creal, cfake, hp.device).detach().cpu().item())
         else:
-            d[key].append(hp.metrics_to_calculate[key](real, fake, hp.device))
+            d[key].append(hp.metrics_to_calculate[key](real, fake, hp.device).detach().cpu().item())
     return d
 
 def log_network_models(C, G, epoch):

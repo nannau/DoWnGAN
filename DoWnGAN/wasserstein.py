@@ -1,11 +1,15 @@
 # This defines the wasserstein architecture
 from DoWnGAN.gen_grid_plots import gen_grid_images
 import torch
+from torch.autograd import grad as torch_grad
+
 import stage as s
 import hyperparams as hp
 from DoWnGAN.losses import content_loss
 from DoWnGAN.gen_grid_plots import gen_grid_images
 from mlflow_epoch import post_epoch_metric_mean, gen_batch_and_log_metrics, initialize_metric_dicts, log_network_models
+        
+torch.autograd.set_detect_anomaly(True)
 
 class WassersteinGAN:
     """Implements Wasserstein GAN with gradient penalty and 
@@ -27,6 +31,7 @@ class WassersteinGAN:
         """
 
         fake = self.G(coarse)
+
         c_real = self.C(fine)
         c_fake = self.C(fake)
 
@@ -42,7 +47,7 @@ class WassersteinGAN:
         critic_loss = c_fake_mean - c_real_mean + gradient_penalty
         w_estimate = c_real_mean - c_fake_mean
 
-        critic_loss.backward()
+        critic_loss.backward(retain_graph = True)
 
         # Update the critic
         self.C_optimizer.step()
@@ -89,9 +94,9 @@ class WassersteinGAN:
         gradients = torch.autograd.grad(
             outputs=critic_interpolated,
             inputs=interpolated,
-            grad_outputs=torch.ones(critic_interpolated.size()).to(hp.device),
-            create_graph=True,
-            retain_graph=True,
+            grad_outputs=torch.ones(critic_interpolated.size(), device=hp.device),
+            create_graph=False,
+            retain_graph=False,
         )[0]
 
         # Gradients have shape (batch_size, num_channels, img_width, img_height),
