@@ -7,8 +7,9 @@ import stage as s
 import hyperparams as hp
 from DoWnGAN.losses import content_loss
 from DoWnGAN.gen_grid_plots import gen_grid_images
+import mlflow
 from mlflow_epoch import post_epoch_metric_mean, gen_batch_and_log_metrics, initialize_metric_dicts, log_network_models
-        
+
 torch.autograd.set_detect_anomaly(True)
 
 class WassersteinGAN:
@@ -95,8 +96,8 @@ class WassersteinGAN:
             outputs=critic_interpolated,
             inputs=interpolated,
             grad_outputs=torch.ones(critic_interpolated.size(), device=hp.device),
-            create_graph=False,
-            retain_graph=False,
+            create_graph=True,
+            retain_graph=True,
         )[0]
 
         # Gradients have shape (batch_size, num_channels, img_width, img_height),
@@ -123,9 +124,9 @@ class WassersteinGAN:
         train_metrics = initialize_metric_dicts({})
         test_metrics = initialize_metric_dicts({})
 
-        for batch_idx, (coarse, fine) in enumerate(dataloader):
-            coarse = coarse.to(hp.device)
-            fine = fine.to(hp.device)
+        for i, data in enumerate(dataloader):
+            coarse = data[0].to(hp.device)
+            fine = data[1].to(hp.device)
             self._critic_train_iteration(coarse, fine)
 
             if self.num_steps%hp.critic_iterations == 0:
@@ -146,12 +147,12 @@ class WassersteinGAN:
 
         # Generate plots from training set
         cbatch, rbatch = next(iter(dataloader))
-        gen_grid_images(self.G, cbatch, rbatch, f"train_{epoch}")
+        gen_grid_images(self.G, cbatch, rbatch, epoch, "train")
 
         test_metrics = initialize_metric_dicts({})
-        for batch_idx, (coarse, fine) in enumerate(testdataloader):
-            coarse = coarse.to(hp.device)
-            fine = fine.to(hp.device)
+        for i, data in enumerate(testdataloader):
+            coarse = data[0].to(hp.device)
+            fine = data[1].to(hp.device)
 
             # Track train set metrics
             test_metrics = gen_batch_and_log_metrics(
@@ -166,7 +167,7 @@ class WassersteinGAN:
         post_epoch_metric_mean(test_metrics, "test")
 
         cbatch, rbatch = next(iter(testdataloader))
-        gen_grid_images(self.G, cbatch, rbatch, f"test_{epoch}")
+        gen_grid_images(self.G, cbatch, rbatch, epoch, "test")
 
         # Log the models to mlflow pytorch models
         print(f"Artifact URI: {mlflow.get_artifact_uri()}")

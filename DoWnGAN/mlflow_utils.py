@@ -6,7 +6,7 @@ def log_hyperparams():
     """Logs the hyperparameters"""
     keys = [item for item in dir(hp) if not item.startswith("__")]
     values = hp.__dict__
-    for key in values:
+    for key in keys:
         log_param(key, values[key])
 
 
@@ -15,14 +15,14 @@ def define_experiment(mlclient):
     print("Select number from list or press n for new experiment: ")
     [print(exp.experiment_id,":", exp.name) for i, exp in enumerate(mlclient.list_experiments())]
     again = False
-    while again is False:
+    while not again:
         choice = input("Input number here: ")
         if choice == "n":
             g = True
-            while g is True:
+            while g:
                 set_exp = input("Enter new descriptive experiment name ")
                 confirm = input(f"You entered {set_exp}. Happy? (Y/n) ")
-                if confirm == "Y" or confirm == '':
+                if confirm in ["Y", '']:
                     mlclient.create_experiment(set_exp)
                     g = False
             again = True
@@ -30,9 +30,9 @@ def define_experiment(mlclient):
         elif choice.isnumeric():
             g = True
             set_exp = mlclient.get_experiment(choice).name
-            while g is True:
+            while g:
                 confirm = input(f"You have selected {set_exp}. Happy? (Y/n) ")
-                if confirm == "Y" or confirm == '':
+                if confirm in ["Y", '']:
                     g = False
             again = True
 
@@ -43,9 +43,9 @@ def define_experiment(mlclient):
 
 def write_tags():
     g = True
-    while g is True:
+    while g:
         choice = input("Describe the specifics and purpose of this training run: ")
         confirm = input(f"You entered {choice}. Happy? (Y/n) ")
-        if confirm == "Y" or confirm == '':
+        if confirm in ["Y", '']:
             g = False
     return choice

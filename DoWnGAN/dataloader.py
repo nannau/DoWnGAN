@@ -7,8 +7,8 @@ class NetCDFSR(Dataset):
     """Data loader from torch.Tensors"""
     def __init__(
         self,
-        fine: torch.Tensor,
         coarse: torch.Tensor,
+        fine: torch.Tensor,
         device: torch.device,
     ) -> torch.Tensor:
         """
@@ -30,4 +30,4 @@ class NetCDFSR(Dataset):
         fine_ = self.fine[idx, ...]
         coarse_ = self.coarse[idx, ...]
 
-        return fine_, coarse_
+        return coarse_, fine_

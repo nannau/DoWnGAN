@@ -21,7 +21,7 @@ def log_to_file(dict, train_test):
     with open(csv_path, "a", newline="") as f:
         df = pd.DataFrame.from_dict(data=dict)
         df.to_csv(f, header=(f.tell()==0))
-    mlflow.log_artifact(csv_path)
+    # mlflow.log_artifact(csv_path)
 
 
 def initialize_metric_dicts(d):
@@ -38,12 +38,12 @@ def post_epoch_metric_mean(d, train_test):
     # Tracks batch metrics through 
     means = {}
     for key in hp.metrics_to_calculate.keys():
-        means[key] = torch.mean(
+        means[key] = [torch.mean(
             torch.FloatTensor(d[key])
-        ).item()
-        log_metric(key, means[key])
-        metric_print(key, means[key])
-    
+        ).item()]
+        log_metric(key, means[key][0])
+        metric_print(key, means[key][0])
+
     log_to_file(means, train_test)
 
 

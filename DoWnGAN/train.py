@@ -29,7 +29,7 @@ mlflow.set_tracking_uri(hp.experiment_path)
 print("Tracking URI: ", mlflow.get_tracking_uri())
 
 with mlflow.start_run(experiment_id = s.exp_id, run_name = s.tag) as run:
-    mlflow.set_tag(run.info.run_id, s.tag)
+    # mlflow.set_tag(run.info.run_id, s.tag)
     log_hyperparams()
     trainer.train(
         s.dataloader, 

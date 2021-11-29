@@ -5,7 +5,7 @@ import torchvision
 import hyperparams as hp
 import mlflow
 
-def gen_grid_images(G, coarse, real, filename):
+def gen_grid_images(G, coarse, real, epoch, train_test):
     """
     Plots a grid of images and saves them to file
     Args:
@@ -13,15 +13,17 @@ def gen_grid_images(G, coarse, real, filename):
         fake (torch.Tensor): The fake input.
         real (torch.Tensor): The real input.
     """
-    random = torch.randn(0, hp.batch_size, 20)
+    torch.manual_seed(0)
+    random = torch.randint(0, hp.batch_size, (20, ))
+    fake = G(coarse[random, ...].to(hp.device))
     coarse = torchvision.utils.make_grid(
         coarse[random, ...],
-        nrow=10
+        nrow=10,
+        padding=5
     )[0, ...]
 
-    fake = G(coarse)
     fake = torchvision.utils.make_grid(
-        fake[random, ...],
+        fake,
         nrow=10
     )[0, ...]
 
@@ -40,19 +42,22 @@ def gen_grid_images(G, coarse, real, filename):
     # Coarse Samples
     subfigs[0].suptitle("Coarse ERAI")
     ax = subfigs[0].subplots(1, 1)
-    ax.imshow(coarse.detach(), origin="lower")
+    ax.imshow(coarse.cpu().detach(), origin="lower")
 
     # Generated fake
     subfigs[1].suptitle("Generated Fields")
     ax = subfigs[1].subplots(1, 1)
-    ax.imshow(fake.detach(), origin="lower")
+    ax.imshow(fake.cpu().detach(), origin="lower")
 
     # Ground Truth
     subfigs[2].suptitle("Ground Truth")
     ax = subfigs[2].subplots(1, 1)
-    ax.imshow(real.detach(), origin="lower")
+    ax.imshow(real.cpu().detach(), origin="lower")
 
-    plt.tight_layout()
-    plt.savefig("train_snap.png")
+    if epoch % 10 == 0:
+        plt.savefig(f"{mlflow.get_artifact_uri()}/{train_test}_{epoch}.png")
+        mlflow.log_artifact(f"{train_test}_{epoch}.png")
+    else:
+        plt.savefig(f"{mlflow.get_artifact_uri()}/{train_test}.png")
+        mlflow.log_artifact(f"{train_test}.png")
     plt.close(fig)
-    mlflow.log_artifact(f"{filename}.png")
