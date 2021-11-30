@@ -80,7 +80,7 @@ class WassersteinGAN:
 
 
     def _gp(self, real, fake, critic):
-        current_batch_size = real.size()[0]
+        current_batch_size = real.size(0)
 
         # Calculate interpolation
         alpha = torch.rand(current_batch_size, 1, 1, 1, requires_grad=True, device=hp.device)

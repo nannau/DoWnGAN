@@ -46,6 +46,9 @@ class Critic(nn.Module):
         self.coarse_dim = coarse_dim
         self.fine_dim = fine_dim
         self.nc = nc
+        layers = []
+        for i in range(1, 5):
+            multiplier = i**2
         self.features = nn.Sequential(
             nn.Conv2d(
                 self.nc, self.coarse_dim, kernel_size=3, stride=1, padding=1
@@ -121,7 +124,7 @@ class Critic(nn.Module):
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(512 * self.coarse_dim, 100),
+            nn.Linear(int((self.coarse_dim*2**3)*(self.fine_dim/2**4)**2), 100),
             # nn.Linear(32*24 * self.coarse_dim, 100),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
             nn.Linear(100, 1),

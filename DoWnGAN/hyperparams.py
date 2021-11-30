@@ -31,7 +31,7 @@ freq_sep = False
 padding = 2 # Valid only if freq_sep is True
 
 # Whether to load preprocessed data
-already_preprocessed = False
+already_preprocessed = True
 
 experiment_path = os.getenv("EXPERIMENT_PATH")
 

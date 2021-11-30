@@ -43,7 +43,4 @@ def train():
 if __name__ == "__main__":
     # set up cluster and workers
     # dask.distributed.nanny["MALLOC_TRIM_THRESHOLD_"] = 0
-    cores = int(multiprocessing.cpu_count()/2)
-    print(f"Using {cores} cores")
-    client = Client(n_workers = cores, threads_per_worker = 2, memory_limit='12GB')
     train()
