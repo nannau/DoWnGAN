@@ -56,8 +56,7 @@ def gen_grid_images(G, coarse, real, epoch, train_test):
 
     if epoch % 10 == 0:
         plt.savefig(f"{mlflow.get_artifact_uri()}/{train_test}_{epoch}.png")
-        mlflow.log_artifact(f"{train_test}_{epoch}.png")
     else:
-        plt.savefig(f"{mlflow.get_artifact_uri()}/{train_test}.png")
+        plt.savefig(f"{train_test}.png")
         mlflow.log_artifact(f"{train_test}.png")
     plt.close(fig)

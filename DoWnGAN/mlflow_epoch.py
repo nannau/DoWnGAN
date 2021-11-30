@@ -41,8 +41,8 @@ def post_epoch_metric_mean(d, train_test):
         means[key] = [torch.mean(
             torch.FloatTensor(d[key])
         ).item()]
-        log_metric(key, means[key][0])
-        metric_print(key, means[key][0])
+        log_metric(f"{key}_{train_test}", means[key][0])
+        metric_print(f"{key}_{train_test}", means[key][0])
 
     log_to_file(means, train_test)
 

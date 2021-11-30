@@ -1,5 +1,3 @@
-import stage as s
-import hyperparams as hp
 from DoWnGAN.wasserstein import WassersteinGAN
 import mlflow
 import torch
@@ -18,22 +16,34 @@ import subprocess
 #     "5555"
 # ])
 
-trainer = WassersteinGAN(
-    s.generator,
-    s.critic,
-    s.G_optimizer,
-    s.C_optimizer
-)
+def train():
+    import stage as s
+    import hyperparams as hp
 
-mlflow.set_tracking_uri(hp.experiment_path)
-print("Tracking URI: ", mlflow.get_tracking_uri())
+    trainer = WassersteinGAN(
+        s.generator,
+        s.critic,
+        s.G_optimizer,
+        s.C_optimizer
+    )
 
-with mlflow.start_run(experiment_id = s.exp_id, run_name = s.tag) as run:
-    # mlflow.set_tag(run.info.run_id, s.tag)
-    log_hyperparams()
-    trainer.train(
-        s.dataloader, 
-        s.testdataloader,
-    ) 
+    mlflow.set_tracking_uri(hp.experiment_path)
+    print("Tracking URI: ", mlflow.get_tracking_uri())
 
-torch.cuda.empty_cache()
+    with mlflow.start_run(experiment_id = s.exp_id, run_name = s.tag) as run:
+        # mlflow.set_tag(run.info.run_id, s.tag)
+        log_hyperparams()
+        trainer.train(
+            s.dataloader, 
+            s.testdataloader,
+        ) 
+
+    torch.cuda.empty_cache()
+
+if __name__ == "__main__":
+    # set up cluster and workers
+    # dask.distributed.nanny["MALLOC_TRIM_THRESHOLD_"] = 0
+    cores = int(multiprocessing.cpu_count()/2)
+    print(f"Using {cores} cores")
+    client = Client(n_workers = cores, threads_per_worker = 2, memory_limit='12GB')
+    train()
