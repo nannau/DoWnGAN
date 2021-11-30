@@ -49,11 +49,12 @@ covariate_names_ordered = {
 fine_names_ordered = {"u10": "u10", "v10": "v10"}
 
 # One of florida, west, or central
-region = "florida"
+region = "central_larger"
 
 regions = {
     "florida": {"lat_min": 4, "lat_max": 20, "lon_min": 70, "lon_max": 86},
     "central": {"lat_min": 30, "lat_max": 46, "lon_min": 50, "lon_max": 66},
+    "central_larger": {"lat_min": 14, "lat_max": 46, "lon_min": 34, "lon_max": 66},
     "west": {"lat_min": 30, "lat_max": 46, "lon_min": 15, "lon_max": 31},
 }
 

@@ -266,3 +266,5 @@ def load_preprocessed():
     fine_test = xr.open_dataset(c.proc_path+f"/fine_test_{c.region}.nc", engine="netcdf4")
 
     return coarse_train, fine_train, coarse_test, fine_test
+
+
