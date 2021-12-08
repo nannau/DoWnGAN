@@ -75,12 +75,18 @@ def load_fine(path_dict: dict) -> dict:
     # Load fine data
     for key in path_dict.keys():
         print("Opening: ", path_dict[key])
-        datasets_dict[key] = xr.open_mfdataset(
-            glob.glob(path_dict[key]), 
-            combine = "by_coords",
-            engine = "netcdf4",
-            parallel = True
-        )
+        if "*" in path_dict[key]:
+            datasets_dict[key] = xr.open_mfdataset(
+                glob.glob(path_dict[key]), 
+                combine = "by_coords",
+                engine = "netcdf4",
+                parallel = True
+            )
+        else:
+            datasets_dict[key] = xr.open_dataset(
+                path_dict[key], 
+                engine = "netcdf4",
+            )
         # Standardize the dimension names so that
         # They're all the same!
         datasets_dict[key] = standardize_attribute_names(datasets_dict[key])
