@@ -96,12 +96,13 @@ def crop_global_mask(mask, ref_ds):
     """The saved mask is a global mask. This function masks the data
     with the local mask defined by the subdomain.
     """
-    varname, = mask.data_vars
     mlat1 = np.argmin(np.abs(ref_ds.lat.min()-mask.lat).values)
     mlat2 = np.argmin(np.abs(ref_ds.lat.max()-mask.lat).values)
     mlon1 = np.argmin(np.abs(ref_ds.lon.min()-(-360+mask.lon)).values)
     mlon2 = np.argmin(np.abs(ref_ds.lon.max()-(-360+mask.lon)).values)+1
-    mask = mask[varname][0, mlat1:mlat2, mlon1:mlon2]
+    mask = mask[:, mlat1:mlat2, mlon1:mlon2]
+
+    print("MASK", mask)
 
     return mask
 
@@ -127,10 +128,10 @@ def load_covariates(path_dict: dict, ref_dataset: xr.Dataset) -> dict:
         datasets_dict[key] = ds[c.covariate_names_ordered[key]]
 
         # Extend the data along the time dimension if invariant
-        if key == "mask":
+        if key == "land_sea_mask":
             datasets_dict[key] = crop_global_mask(datasets_dict[key], ref_dataset)
-
-        datasets_dict[key] = crop_dataset(datasets_dict[key], 1)
+        else:
+            datasets_dict[key] = crop_dataset(datasets_dict[key], 1)
 
         if key in c.invariant_fields:
             datasets_dict[key] = extend_along_time(datasets_dict[key])

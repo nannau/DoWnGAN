@@ -26,6 +26,10 @@ fine_train = torch.from_numpy(fine_train.to_array().to_numpy()).transpose(0, 1).
 coarse_test = torch.from_numpy(coarse_test.to_array().to_numpy()).transpose(0, 1).float()
 fine_test = torch.from_numpy(fine_test.to_array().to_numpy()).transpose(0, 1).float()
 
+print("Coarse data shape: ", coarse_train.shape)
+print("Fine data shape: ", fine_train.shape)
+
+
 # Get shapes for networks
 fine_dim_n = fine_train.shape[-1]
 n_predictands = fine_train.shape[1]
