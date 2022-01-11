@@ -140,12 +140,14 @@ def load_covariates(path_dict: dict, ref_dataset: xr.Dataset) -> dict:
             datasets_dict[key] = crop_dataset(datasets_dict[key], 1)
 
         if key in c.invariant_fields:
+            print("Invariant field: ", key)
             datasets_dict[key] = extend_along_time(datasets_dict[key])
+            print(datasets_dict[key])
 
     ref_coarse = datasets_dict[c.ref_coarse]
     for key in datasets_dict:
         datasets_dict[key] = datasets_dict[key].assign_coords({"time": c.range_datetimes, "lat": ref_coarse.lat, "lon": ref_coarse.lon})
-
+    print(datasets_dict["geopotential"])
     return datasets_dict
 
 
