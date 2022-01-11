@@ -5,6 +5,7 @@ from DoWnGAN.models.critic import Critic
 from DoWnGAN.dataloader import NetCDFSR
 import mlflow_utils as mlf 
 import hyperparams as hp
+import torch
 
 from mlflow.tracking import MlflowClient
 import torch
@@ -19,12 +20,20 @@ if not hp.already_preprocessed:
 if hp.already_preprocessed:
     coarse_train, fine_train, coarse_test, fine_test = load_preprocessed()
 
+
 # Convert to tensors
 print("Loading region into memory...")
 coarse_train = torch.from_numpy(coarse_train.to_array().to_numpy()).transpose(0, 1).float()
 fine_train = torch.from_numpy(fine_train.to_array().to_numpy()).transpose(0, 1).float()
 coarse_test = torch.from_numpy(coarse_test.to_array().to_numpy()).transpose(0, 1).float()
 fine_test = torch.from_numpy(fine_test.to_array().to_numpy()).transpose(0, 1).float()
+
+noise_train = torch.normal(mean=torch.zeros_like(coarse_train[:, :1, ...]), std=torch.ones_like(coarse_train[:, :1, ...]))
+noise_test = torch.normal(mean=torch.zeros_like(coarse_test[:, :1, ...]), std=torch.ones_like(coarse_test[:, :1, ...]))
+
+coarse_train = torch.cat([coarse_train, noise_train], 1)
+coarse_test = torch.cat([coarse_test, noise_test], 1)
+
 
 print("Coarse data shape: ", coarse_train.shape)
 print("Fine data shape: ", fine_train.shape)
@@ -65,3 +74,4 @@ testdataloader = torch.utils.data.DataLoader(
 )
 
     
+
