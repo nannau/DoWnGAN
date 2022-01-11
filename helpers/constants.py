@@ -28,13 +28,13 @@ cov_paths_dict = {
     "u10": os.environ.get('COVARIATE_DATA_PATH')+"/interim_2000-10-01_to_2013-09-30.nc",
     "v10": os.environ.get('COVARIATE_DATA_PATH')+"/interim_2000-10-01_to_2013-09-30.nc",
     "land_sea_mask": os.environ.get('COVARIATE_DATA_PATH')+"/_grib2netcdf-webmars-public-svc-blue-005-6fe5cac1a363ec1525f54343b6cc9fd8-J3TMVF.nc",
-    "surface_roughness": os.environ.get('COVARIATE_DATA_PATH')+"/interim_roughness_2000-10-01_to_2013-09-30.nc",
     "surface_pressure": os.environ.get('COVARIATE_DATA_PATH')+"/interim_surface_pressure_2000-10-01_to_2013-09-30.nc",
-    "cape": os.environ.get('COVARIATE_DATA_PATH')+"/regrid_era5_era_cape_2000-10-01-2013-09-30.nc",
+    "surface_roughness": os.environ.get('COVARIATE_DATA_PATH')+"/interim_roughness_2000-10-01_to_2013-09-30.nc",
     "geopotential": os.environ.get('COVARIATE_DATA_PATH')+"/geopotential_era_interim.nc",
+    "cape": os.environ.get('COVARIATE_DATA_PATH')+"/regrid_era5_era_cape_2000-10-01-2013-09-30.nc",
 }
 
-invariant_fields = ["land_sea_mask", "geopotential", "geopotential2"]
+invariant_fields = ["land_sea_mask", "geopotential"]
 covariate_names_ordered = {
     # Standard name: variable name in netcdf
     "u10": 'u10',
@@ -51,6 +51,8 @@ fine_names_ordered = {"u10": "u10", "v10": "v10"}
 # One of florida, west, or central
 # One of florida, west, or central
 region = "florida"
+# region = "central_larger"
+
 
 regions = {
     "florida": {"lat_min": 4, "lat_max": 20, "lon_min": 70, "lon_max": 86},
