@@ -36,7 +36,7 @@ class WassersteinGAN:
         c_real = self.C(fine)
         c_fake = self.C(fake)
 
-        gradient_penalty = self._gp(fine, fake, self.C)
+        gradient_penalty = hp.gp_lambda * self._gp(fine, fake, self.C)
 
         # Zero the gradients
         self.C_optimizer.zero_grad()
@@ -46,7 +46,7 @@ class WassersteinGAN:
         c_fake_mean = torch.mean(c_fake)
 
         critic_loss = c_fake_mean - c_real_mean + gradient_penalty
-        w_estimate = c_real_mean - c_fake_mean
+        self.w_estimate = c_real_mean - c_fake_mean
 
         critic_loss.backward(retain_graph = True)
 
@@ -70,7 +70,7 @@ class WassersteinGAN:
         g_loss = -torch.mean(c_fake)*hp.gamma
 
         # Add content loss and create objective function
-        g_loss += hp.content_lambda * content_loss(fake, fine, device=hp.device)
+        #g_loss += (self.w_estimate.cuda().float().detach()/(100*hp.content_lambda)) * content_loss(fake, fine, device=hp.device)
 
         g_loss.backward()
 
