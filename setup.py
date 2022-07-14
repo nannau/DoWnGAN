@@ -1,25 +1,10 @@
 import sys
 from setuptools import setup, find_packages
-from setuptools.command.test import test as TestCommand
-
-
-class PyTest(TestCommand):
-    def finalize_options(self):
-        TestCommand.finalize_options(self)
-        self.test_args = ["-v", "tests"]
-        self.test_suite = True
-
-    def run_tests(self):
-        # import here, cause outside the eggs aren't loaded
-        import pytest
-
-        errno = pytest.main(self.test_args)
-        sys.exit(errno)
 
 
 setup(
     name="DoWnGAN",
-    description="Wasserstein Generative Adversarial Networks for Wind Field Super Resolution",
+    description="DOwnscaling with WassersteiN Generative Adversarial Networks for Super Resolution",
     keywords="AI deep learning generative super resolution downscaling",
     packages=find_packages(),
     version="0.1dev",
@@ -27,22 +12,22 @@ setup(
     author_email="nannau@uvic.ca",
     zip_safe=True,
     scripts=[
-        "DoWnGAN/dataloader.py",
-        "DoWnGAN/gen_plots.py",
-        "DoWnGAN/losses.py",
-        "DoWnGAN/prep_gan.py",
-        "DoWnGAN/process_data.py",
-        "DoWnGAN/training.py",
-        "DoWnGAN/utils.py",
-        "DoWnGAN/run.py",
-        "DoWnGAN/models/critic.py",
-        "DoWnGAN/models/generator.py"
+        "DoWnGAN/GAN/train.py",
+        "DoWnGAN/GAN/dataloader.py",
+        "DoWnGAN/GAN/losses.py",
+        "DoWnGAN/config/config.py",
+        "DoWnGAN/config/hyperparams.py",
+        "DoWnGAN/helpers/prep_gan.py",
+        "DoWnGAN/helpers/wrf_times.py",
+        "DoWnGAN/helpers/gen_experiment_datasets.py",
+        "DoWnGAN/networks/critic.py",
+        "DoWnGAN/networks/generator.py",
+        "DoWnGAN/mlflow_tools/gen_grid_plots.py",
     ],
-    install_requires=["numpy", "torch", "xarray", "sklearn"],
-    tests_require=["pytest"],
-    cmdclass={"test": PyTest},
+    install_requires=["numpy", "dask", "torch", "xarray", "sklearn"],
+    extras_require = {"dask": "distributed"},
     package_dir={"DoWnGAN": "DoWnGAN"},
-    package_data={"DoWnGAN": ["tests/*", "data/*", "DoWnGAN/", "DoWnGAN/tests/"]},
+    package_data={"DoWnGAN": ["data/*", "DoWnGAN/"]},
     classifiers="""
         Intended Audience :: Science/Research
         License :: GNU General Public License v3 (GPLv3)

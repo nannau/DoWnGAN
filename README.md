@@ -1,4 +1,7 @@
 # DoWnGAN
+
+### DOwnscaling WassersteiN Generative Adversarial Network
+---
 This repo is under development as thesis work and is by not complete or tested.
 
 This repo implements a Wasserstein Generative Adversarial Network with Gradient Penalty (WGAN-GP) to perform single image super resolution (SISR) to downscale climate fields.
@@ -6,17 +9,32 @@ This repo implements a Wasserstein Generative Adversarial Network with Gradient 
 SISR is applied to ERA-Interim coarse input wind fields (but can be generalized to other fields) to acheive the same resolution as WRF U10 and V10 wind components. 
 
 # Requirements
-Although not absolutely required to run this source code, a working instance of CUDA and Pytorch is required for this repo. 
+A working version of CUDA with Pytorch is required for this repo. 
 
-Install requirements
-```bash
-pip install -r requirements
-```
+1. Create a python virtual environment and activate it:
 
-Install DoWnGAN
-```bash
-pip install -e /path/to/cloned/DoWnGAN/
-```
+    ```python3 -m venv myvenv```
+
+    ```source myvenv/bin/activate```
+
+2. Install requirements
+    ```pip install -r requirements```
+    ```pip install "dask[distributed]"```
+
+3. Install DoWnGAN (-e is essential if you want to customize the code)
+```pip install -e /path/to/cloned/DoWnGAN/```
+
+# Configuring the GAN
+
+1. Edit the paths in `config/config.py`
+
+2. To run the GAN, use the script in `GAN/train.py`
+```python DoWnGAN/GAN/train.py```
+
+3. Follow the instructions to log the file, and run a new mlflow server with
+```python DoWnGAN/mlflow_tools/mlflow_server_cmd.py```
+
+4. Go to `localhost:5555` or specify port in `mlflow_server_cmd.py` file. 
 
 Check if CUDA is installed and PyTorch has access to cuda GPU
 ```python3

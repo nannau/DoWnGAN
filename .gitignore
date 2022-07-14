@@ -3,3 +3,8 @@ notebooks/.ipynb_checkpoints/
 .ipynb_checkpoints/
 __pycache__
 DoWnGAN.egg-info
+data/proc_data/*
+DoWnGAN/GAN/dask-worker-space/
+DoWnGAN/GAN/~/
+DoWnGAN/helpers/dask-worker-space/
+DoWnGAN/mlflow_tools/mlflow.db
